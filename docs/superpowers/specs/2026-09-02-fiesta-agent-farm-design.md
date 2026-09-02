@@ -51,6 +51,7 @@ Agent musi rozumieć ticket, więc nie może być skryptem.
 | `escalator` | Nasłuchuje markerów w panelach; `ASK`/`FAIL`/`DONE` → Telegram. Reply z Telegrama → `pane send-text`. |
 | `skill: orchestrate-ticket` | Playbook agenta: od ticketu do draft PR-a. |
 | `skill: verify-ticket` | Generyczne QA przed otwarciem PR-a. |
+| `setup` | Interaktywny kreator: zbiera i weryfikuje sekrety, zakłada kolumny na boardzie, zapisuje `.env`. |
 
 Poller odpytuje **Trello**, ale stanów paneli **nie odpytuje** — do tego służy
 subskrypcja zdarzeń w socket API herdr.
@@ -58,6 +59,32 @@ subskrypcja zdarzeń w socket API herdr.
 Webhooki Trello (zamiast pollingu) są świadomie odłożone: wymagałyby publicznego
 URL, czyli kolejnej ruchomej części i powierzchni ataku. Wymiana pollera na
 webhook nie ruszy reszty systemu.
+
+### Setup
+
+`fiesta setup` — interaktywny, idempotentny kreator uruchamiany raz na serwerze.
+Prowadzi przez wszystko, czego system potrzebuje, i **weryfikuje każdy sekret
+w momencie podania**. Kreator, który zapisuje zły token na ślepo, tylko przenosi
+awarię na godzinę, w której nikt nie patrzy.
+
+1. Wymagania: `herdr`, `docker`, `git` obecne w PATH.
+2. **Trello** — klucz API, potem gotowy do kliknięcia URL autoryzacyjny, potem
+   token. Weryfikacja przez `GET /1/members/me`.
+3. **Board** — wybór istniejącego z listy albo utworzenie nowego.
+4. **Kolumny** — brakujące z zestawu `Backlog`, `Ready`, `In Progress`,
+   `Blocked`, `Review`, `Done` zostają utworzone. Dopasowanie po nazwie, więc
+   istniejące kolumny są nietykane, a ponowny setup nic nie duplikuje.
+5. **Telegram** — token bota, weryfikacja przez `getMe`, następnie prośba
+   o wysłanie dowolnej wiadomości do bota i **automatyczne wykrycie `chat_id`**
+   z `getUpdates`. Użytkownik nie musi znać swojego ID ani go szukać.
+6. **GitHub** — token, weryfikacja przez `GET /user`, **owner odczytany
+   automatycznie** z odpowiedzi.
+7. **Ścieżki** — katalog roboczy (domyślnie `/mnt/user/appdata/fiesta`) oraz
+   lokalizacja poświadczeń Claude.
+8. Zapis `.env` z uprawnieniami `600` i podsumowanie.
+
+Ponowne uruchomienie aktualizuje konfigurację bez efektów ubocznych, więc
+`fiesta setup` jest jednocześnie narzędziem diagnostycznym po wymianie tokenu.
 
 ## 4. Kontrakt karty i maszyna stanów
 
@@ -131,6 +158,13 @@ przeniesienie karty z powrotem do `Ready`.
   repos/<repo>/     lustro, tylko fetch, agent nigdy tego nie dotyka
   work/<shortLink>/ katalog roboczy jednego ticketu
 ```
+
+### Repozytoria bez rejestracji
+
+Setup nie pyta, **nad czym** agent będzie pracował — pyta tylko, **gdzie**. Label
+na karcie nazywa repo, a dispatcher przy pierwszym użyciu klonuje lustro
+z `<owner>/<label>`. Nie ma listy projektów do utrzymania ani kroku „zarejestruj
+repozytorium": dodanie nowego projektu to dodanie labela na boardzie.
 
 ### Klon, nie worktree
 
@@ -336,7 +370,8 @@ w asercji. Skill walidujemy tym e2e i obserwacją pierwszych ticketów.
 
 ## 10. Sekrety i konfiguracja
 
-Wszystko w `.env` na serwerze, poza repo.
+Wszystko w `.env` na serwerze, poza repo. Zbierane i weryfikowane przez
+`fiesta setup` — użytkownik nie tworzy tego pliku ręcznie.
 
 | Sekret | Do czego |
 |---|---|
@@ -347,7 +382,8 @@ Wszystko w `.env` na serwerze, poza repo.
 | `GITHUB_TOKEN` | push i draft PR, scope `repo` |
 | poświadczenia Claude | montowane read-only do kontenera |
 
-Konfiguracja: `TRELLO_BOARD_ID`, nazwy kolumn, `MAX_ACTIVE` (1), `TICKET_TIMEOUT`
+Konfiguracja: `TRELLO_BOARD_ID`, `GITHUB_OWNER`, id kolumn (rozwiązane raz przez
+setup, nie po nazwie w czasie działania), `MAX_ACTIVE` (1), `TICKET_TIMEOUT`
 (60 min), `POLL_INTERVAL` (30 s), korzeń `/mnt/user/appdata/fiesta`.
 
 ## 11. Świadomie poza MVP
