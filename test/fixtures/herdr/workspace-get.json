@@ -1,0 +1,16 @@
+{
+  "id": "cli:workspace:get",
+  "result": {
+    "type": "workspace_info",
+    "workspace": {
+      "active_tab_id": "w2:t1",
+      "agent_status": "unknown",
+      "focused": false,
+      "label": "probe",
+      "number": 2,
+      "pane_count": 1,
+      "tab_count": 1,
+      "workspace_id": "w2"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "cli:pane:get",
+  "result": {
+    "pane": {
+      "agent_status": "unknown",
+      "cwd": "/private/tmp",
+      "focused": false,
+      "foreground_cwd": "/private/tmp",
+      "pane_id": "w2:p1",
+      "revision": 1,
+      "scroll": {
+        "max_offset_from_bottom": 0,
+        "offset_from_bottom": 0,
+        "viewport_rows": 39
+      },
+      "tab_id": "w2:t1",
+      "terminal_id": "term_65a7f722ebf833",
+      "terminal_title": "filipkostecki@MacBook-Pro-Filip:/private/tmp",
+      "terminal_title_stripped": "filipkostecki@MacBook-Pro-Filip:/private/tmp",
+      "workspace_id": "w2"
+    },
+    "type": "pane_info"
+  }
+}

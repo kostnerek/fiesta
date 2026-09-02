@@ -1,0 +1,1 @@
+(pane run produces empty stdout on success; no --json flag needed/available)
