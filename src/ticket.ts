@@ -22,6 +22,7 @@ export type Ticket = {
 export class TicketError extends Error {}
 
 const BASE_BRANCH_LINE = /^base:[ \t]*(\S+)[ \t]*$/m;
+const SHORT_LINK = /^[A-Za-z0-9]+$/;
 const MAX_SLUG_LENGTH = 40;
 
 function slugify(title: string): string {
@@ -38,6 +39,10 @@ export function toTicket(card: TrelloCard): Ticket {
     throw new TicketError(
       `Card "${card.name}" needs exactly one label naming the repository, found ${card.labels.length}.`,
     );
+  }
+
+  if (!SHORT_LINK.test(card.shortLink)) {
+    throw new TicketError(`Card "${card.name}" has an unusable shortLink "${card.shortLink}".`);
   }
 
   const repo = card.labels[0]!.name;

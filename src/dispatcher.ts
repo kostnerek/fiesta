@@ -1,7 +1,7 @@
 import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
 import { buildAgentCommand, buildPrompt } from './prompt.js';
-import { TicketError, toTicket, type TrelloCard } from './ticket.js';
+import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TrelloClient } from './trello.js';
 import type { ensureMirror, prepareWorkspace } from './workspace.js';
 
@@ -23,7 +23,7 @@ export class Dispatcher {
   async claimAndStart(card: TrelloCard): Promise<void> {
     const { trello, herdr, git, config } = this.deps;
 
-    let ticket;
+    let ticket: Ticket;
     try {
       ticket = toTicket(card);
     } catch (error) {

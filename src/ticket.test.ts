@@ -45,4 +45,9 @@ describe('toTicket', () => {
     });
     expect(() => toTicket(card)).toThrow(TicketError);
   });
+
+  it('rejects a card whose shortLink contains shell metacharacters', () => {
+    const card = makeCard({ shortLink: 'aB;rm -rf /' });
+    expect(() => toTicket(card)).toThrow(TicketError);
+  });
 });
