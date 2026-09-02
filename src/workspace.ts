@@ -14,19 +14,28 @@ function redactError(err: unknown, secrets: string[]): unknown {
   if (!(err instanceof Error) || secrets.length === 0) {
     return err;
   }
-  const fields = err as Error & Record<string, unknown>;
-  for (const key of ['message', 'cmd', 'stdout', 'stderr', 'stack'] as const) {
+  const fields = err as unknown as Record<string, unknown>;
+  for (const key of ['message', 'cmd', 'stdout', 'stderr', 'stack', 'spawnargs']) {
     const value = fields[key];
     if (typeof value === 'string') {
       fields[key] = redact(value, secrets);
+    } else if (Array.isArray(value)) {
+      fields[key] = value.map((item) => (typeof item === 'string' ? redact(item, secrets) : item));
     }
   }
   return err;
 }
 
-async function git(args: string[], secrets: string[] = []): Promise<string> {
+async function git(
+  args: string[],
+  options: { secrets?: string[]; env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  const { secrets = [], env } = options;
   try {
-    const { stdout } = await execFileAsync('git', args, { maxBuffer: 32 * 1024 * 1024 });
+    const { stdout } = await execFileAsync('git', args, {
+      maxBuffer: 32 * 1024 * 1024,
+      ...(env ? { env } : {}),
+    });
     return stdout;
   } catch (err) {
     throw redactError(err, secrets);
@@ -42,10 +51,19 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-function authHeaderArg(token: string): { flag: string; secrets: string[] } {
+function tokenCredentials(token: string): {
+  env: NodeJS.ProcessEnv;
+  secrets: string[];
+} {
   const credentials = Buffer.from(`x-access-token:${token}`).toString('base64');
+  const headerValue = `AUTHORIZATION: basic ${credentials}`;
   return {
-    flag: `http.extraHeader=AUTHORIZATION: basic ${credentials}`,
+    env: {
+      ...process.env,
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraHeader',
+      GIT_CONFIG_VALUE_0: headerValue,
+    },
     secrets: [token, credentials],
   };
 }
@@ -58,15 +76,15 @@ export async function ensureMirror(params: {
 }): Promise<string> {
   const mirrorPath = join(params.root, 'repos', params.repo);
   const remote = `https://github.com/${params.owner}/${params.repo}.git`;
-  const { flag, secrets } = authHeaderArg(params.token);
+  const { env, secrets } = tokenCredentials(params.token);
 
   if (await exists(mirrorPath)) {
-    await git(['-C', mirrorPath, '-c', flag, 'fetch', '--prune', 'origin'], secrets);
+    await git(['-C', mirrorPath, 'fetch', '--prune', 'origin'], { env, secrets });
     return mirrorPath;
   }
 
   await mkdir(join(params.root, 'repos'), { recursive: true });
-  await git(['-c', flag, 'clone', remote, mirrorPath], secrets);
+  await git(['clone', remote, mirrorPath], { env, secrets });
   return mirrorPath;
 }
 

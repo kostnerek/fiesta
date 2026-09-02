@@ -2,9 +2,9 @@ import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { prepareWorkspace, removeWorkspace } from './workspace.js';
+import { inspect, promisify } from 'node:util';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ensureMirror, prepareWorkspace, removeWorkspace } from './workspace.js';
 import type { Ticket } from './ticket.js';
 
 const run = promisify(execFile);
@@ -90,5 +90,36 @@ describe('removeWorkspace', () => {
     await expect(removeWorkspace({ root, shortLink: join('..', 'sentinel') })).rejects.toThrow();
 
     expect(await readFile(join(sentinelDir, 'keep.txt'), 'utf8')).toBe('keep\n');
+  });
+});
+
+describe('ensureMirror credential handling', () => {
+  const originalPath = process.env.PATH;
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+  });
+
+  it('does not leak the token when the git binary cannot be spawned', async () => {
+    const emptyBinDir = await mkdtemp(join(tmpdir(), 'fiesta-empty-bin-'));
+    process.env.PATH = emptyBinDir;
+
+    const token = 'SECRETVALUE123';
+    let caught: unknown;
+    try {
+      await ensureMirror({ root, owner: 'someowner', repo: 'demo', token });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    const credentials = Buffer.from(`x-access-token:${token}`).toString('base64');
+    const serialized = JSON.stringify(caught, Object.getOwnPropertyNames(caught as object));
+    const inspected = inspect(caught);
+
+    expect(serialized).not.toContain(token);
+    expect(serialized).not.toContain(credentials);
+    expect(inspected).not.toContain(token);
+    expect(inspected).not.toContain(credentials);
   });
 });
