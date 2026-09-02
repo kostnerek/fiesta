@@ -27,4 +27,12 @@ describe('findLastMarker', () => {
   it('accepts a marker with no trailing text', () => {
     expect(findLastMarker('@@FIESTA:FAIL\n')).toEqual({ kind: 'FAIL', text: '' });
   });
+
+  it('matches a marker line even when the pane output uses CRLF endings', () => {
+    const output = 'work\r\n@@FIESTA:ASK Which payment provider should I wire up?\r\n';
+    expect(findLastMarker(output)).toEqual({
+      kind: 'ASK',
+      text: 'Which payment provider should I wire up?',
+    });
+  });
 });

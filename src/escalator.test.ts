@@ -56,6 +56,15 @@ describe('Escalator.inspect', () => {
     expect(telegram.send).not.toHaveBeenCalled();
   });
 
+  it('keeps waiting past the timeout while the pane status is still working', async () => {
+    const { escalator, telegram, trello } = build('compiling...\n', 'working');
+    const longAgo = Date.now() - 5000;
+    expect(await escalator.inspect(ticket, 'pane-1', longAgo)).toBe('running');
+    expect(trello.moveCard).not.toHaveBeenCalled();
+    expect(trello.addComment).not.toHaveBeenCalled();
+    expect(telegram.send).not.toHaveBeenCalled();
+  });
+
   it('fails a ticket that went quiet past the timeout', async () => {
     const { escalator, trello } = build('nothing new\n', 'idle');
     const longAgo = Date.now() - 5000;
@@ -101,5 +110,25 @@ describe('Escalator.deliverReplies', () => {
     await escalator.deliverReplies(new Map());
 
     expect(herdr.sendText).not.toHaveBeenCalled();
+  });
+
+  it('still delivers the second reply when the first one fails', async () => {
+    const { escalator, herdr, telegram } = build('');
+    const otherTicket: Ticket = { ...ticket, cardId: 'card-2', shortLink: 'zzzz9999', title: 'Other card' };
+    herdr.sendText.mockRejectedValueOnce(new Error('pane gone')).mockResolvedValueOnce(undefined);
+    telegram.getUpdates.mockResolvedValue([
+      { updateId: 5, chatId: '42', text: 'first reply', replyToText: '🤖 [aBcD1234] Add HELLO file' },
+      { updateId: 6, chatId: '42', text: 'second reply', replyToText: '🤖 [zzzz9999] Other card' },
+    ]);
+
+    await escalator.deliverReplies(
+      new Map([
+        ['aBcD1234', { ticket, paneId: 'pane-1' }],
+        ['zzzz9999', { ticket: otherTicket, paneId: 'pane-2' }],
+      ]),
+    );
+
+    expect(herdr.sendText).toHaveBeenNthCalledWith(1, 'pane-1', 'first reply');
+    expect(herdr.sendText).toHaveBeenNthCalledWith(2, 'pane-2', 'second reply');
   });
 });

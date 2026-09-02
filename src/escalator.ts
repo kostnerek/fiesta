@@ -63,18 +63,22 @@ export class Escalator {
     const updates = await telegram.getUpdates(this.telegramOffset);
 
     for (const update of updates) {
-      this.telegramOffset = update.updateId + 1;
-      if (!update.replyToText) {
-        continue;
+      const shortLink = update.replyToText ? extractShortLink(update.replyToText) : null;
+      try {
+        const target = shortLink ? active.get(shortLink) : undefined;
+        if (target) {
+          await herdr.sendText(target.paneId, update.text);
+          await trello.moveCard(target.ticket.cardId, config.trello.lists.inProgress);
+          await trello.addComment(target.ticket.cardId, `🤖 Answer delivered: ${update.text}`);
+        }
+      } catch (error) {
+        console.error(
+          `Failed to deliver Telegram update ${update.updateId} for shortLink ${shortLink ?? 'unknown'}:`,
+          error,
+        );
+      } finally {
+        this.telegramOffset = update.updateId + 1;
       }
-      const shortLink = extractShortLink(update.replyToText);
-      const target = shortLink ? active.get(shortLink) : undefined;
-      if (!target) {
-        continue;
-      }
-      await herdr.sendText(target.paneId, update.text);
-      await trello.moveCard(target.ticket.cardId, config.trello.lists.inProgress);
-      await trello.addComment(target.ticket.cardId, `🤖 Answer delivered: ${update.text}`);
     }
   }
 }
