@@ -3,7 +3,7 @@ import { chmod, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { confirm, input, select } from '@inquirer/prompts';
+import { confirm, input, password, select } from '@inquirer/prompts';
 import { GitHubClient } from './github.js';
 import { COLUMN_TITLES, detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
 import { TelegramClient } from './telegram.js';
@@ -29,12 +29,12 @@ async function main(): Promise<void> {
   await requireBinaries();
   console.log('\n=== Trello ===');
   console.log('Open https://trello.com/power-ups/admin and copy your API key.');
-  const trelloKey = await input({ message: 'Trello API key:' });
+  const trelloKey = await password({ message: 'Trello API key:' });
   console.log(
     `\nNow open this URL and approve access:\n` +
       `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=${trelloKey}\n`,
   );
-  const trelloToken = await input({ message: 'Trello token:' });
+  const trelloToken = await password({ message: 'Trello token:' });
 
   const trello = new TrelloClient({ key: trelloKey, token: trelloToken });
   const me = await trello.me();
@@ -55,7 +55,7 @@ async function main(): Promise<void> {
   console.log(`Columns ready: ${Object.values(COLUMN_TITLES).join(', ')}.`);
 
   console.log('\n=== Telegram ===');
-  const telegramToken = await input({ message: 'Telegram bot token (from @BotFather):' });
+  const telegramToken = await password({ message: 'Telegram bot token (from @BotFather):' });
   const telegram = new TelegramClient(telegramToken);
   const bot = await telegram.getMe();
   console.log(`Bot @${bot.username} reachable.`);
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   console.log(`Detected chat id ${chatId}.`);
 
   console.log('\n=== GitHub ===');
-  const githubToken = await input({ message: 'GitHub token (scope: repo):' });
+  const githubToken = await password({ message: 'GitHub token (scope: repo):' });
   const owner = (await new GitHubClient({ token: githubToken, owner: '' }).user()).login;
   console.log(`Authenticated as ${owner}.`);
 

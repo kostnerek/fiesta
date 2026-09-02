@@ -61,4 +61,9 @@ describe('renderEnvFile', () => {
     expect(env).toContain('TRELLO_TOKEN="ab#cd"');
     expect(env.trim().split('\n')).toHaveLength(2);
   });
+
+  it('escapes embedded double quotes so the output stays structurally valid', () => {
+    const env = renderEnvFile({ TRELLO_TOKEN: 'ab"cd' });
+    expect(env).toContain('TRELLO_TOKEN="ab\\"cd"');
+  });
 });

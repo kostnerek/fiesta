@@ -45,6 +45,6 @@ export async function detectChatId(
 
 export function renderEnvFile(values: Record<string, string>): string {
   return `${Object.entries(values)
-    .map(([name, value]) => `${name}="${value}"`)
+    .map(([name, value]) => `${name}="${value.replace(/"/g, '\\"')}"`)
     .join('\n')}\n`;
 }
