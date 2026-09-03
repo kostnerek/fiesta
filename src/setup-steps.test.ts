@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
+import { askUntilValid, detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
 
 describe('ensureColumns', () => {
   it('creates only the missing columns and returns every id', async () => {
@@ -65,5 +65,72 @@ describe('renderEnvFile', () => {
   it('escapes embedded double quotes so the output stays structurally valid', () => {
     const env = renderEnvFile({ TRELLO_TOKEN: 'ab"cd' });
     expect(env).toContain('TRELLO_TOKEN="ab\\"cd"');
+  });
+});
+
+describe('askUntilValid', () => {
+  it('returns as soon as the value verifies', async () => {
+    const ask = vi.fn().mockResolvedValue('good');
+    const result = await askUntilValid({
+      attempts: 3,
+      ask,
+      verify: async (value: string) => `hello ${value}`,
+      onError: () => undefined,
+    });
+
+    expect(result).toEqual({ value: 'good', description: 'hello good' });
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks again after a rejected credential, reporting why', async () => {
+    const ask = vi.fn().mockResolvedValueOnce('bad').mockResolvedValue('good');
+    const errors: string[] = [];
+
+    const result = await askUntilValid({
+      attempts: 3,
+      ask,
+      verify: async (value: string) => {
+        if (value === 'bad') {
+          throw new Error('401 invalid key');
+        }
+        return 'ok';
+      },
+      onError: (message) => errors.push(message),
+    });
+
+    expect(result.value).toBe('good');
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(errors).toEqual(['401 invalid key']);
+  });
+
+  it('gives up after the attempt limit rather than looping forever', async () => {
+    const ask = vi.fn().mockResolvedValue('bad');
+
+    await expect(
+      askUntilValid({
+        attempts: 2,
+        ask,
+        verify: async () => {
+          throw new Error('401 invalid token');
+        },
+        onError: () => undefined,
+      }),
+    ).rejects.toThrow(/Giving up after 2 attempts.*401 invalid token/);
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+
+  it('tells the caller how many attempts remain', async () => {
+    const remaining: number[] = [];
+    await expect(
+      askUntilValid({
+        attempts: 3,
+        ask: async () => 'bad',
+        verify: async () => {
+          throw new Error('nope');
+        },
+        onError: (_message, attemptsLeft) => remaining.push(attemptsLeft),
+      }),
+    ).rejects.toThrow();
+    expect(remaining).toEqual([2, 1, 0]);
   });
 });

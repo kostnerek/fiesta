@@ -54,6 +54,9 @@ same thing.
   an empty directory in its place rather than complaining;
 - walks you through Trello (API key + token), creates any missing board
   columns (`Backlog`, `Ready`, `In Progress`, `Blocked`, `Review`, `Done`);
+- **verifies each credential as you enter it, and asks again if it is
+  rejected** (three attempts), showing the API's own message — a wrong token
+  costs you one prompt, not the whole run;
 - walks you through Telegram (bot token, auto-detects your chat id) and
   GitHub (token, scope `repo`);
 - asks for the data root (defaults to `/mnt/user/appdata/fiesta`) and your

@@ -48,3 +48,26 @@ export function renderEnvFile(values: Record<string, string>): string {
     .map(([name, value]) => `${name}="${value.replace(/"/g, '\\"')}"`)
     .join('\n')}\n`;
 }
+
+export type Verified<T> = { value: T; description: string };
+
+export async function askUntilValid<T>(params: {
+  attempts: number;
+  ask: () => Promise<T>;
+  verify: (value: T) => Promise<string>;
+  onError: (message: string, attemptsLeft: number) => void;
+}): Promise<Verified<T>> {
+  let lastMessage = 'unknown error';
+
+  for (let attempt = params.attempts; attempt > 0; attempt -= 1) {
+    const value = await params.ask();
+    try {
+      return { value, description: await params.verify(value) };
+    } catch (error) {
+      lastMessage = error instanceof Error ? error.message : String(error);
+      params.onError(lastMessage, attempt - 1);
+    }
+  }
+
+  throw new Error(`Giving up after ${params.attempts} attempts. Last error: ${lastMessage}`);
+}

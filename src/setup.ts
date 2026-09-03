@@ -3,7 +3,13 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { confirm, input, password, select } from '@inquirer/prompts';
 import { GitHubClient } from './github.js';
-import { COLUMN_TITLES, detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
+import {
+  askUntilValid,
+  COLUMN_TITLES,
+  detectChatId,
+  ensureColumns,
+  renderEnvFile,
+} from './setup-steps.js';
 import { TelegramClient } from './telegram.js';
 import {
   chooseInstallDir,
@@ -83,22 +89,42 @@ async function requireSignedInClaude(directory: string): Promise<void> {
   }
 }
 
+const CREDENTIAL_ATTEMPTS = 3;
+
+function reportRejected(what: string) {
+  return (message: string, attemptsLeft: number): void => {
+    console.log(`\n${what} was rejected: ${message}`);
+    console.log(
+      attemptsLeft > 0
+        ? `Try again (${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left).`
+        : 'No attempts left.',
+    );
+  };
+}
+
 async function main(): Promise<void> {
   await ensureTools();
   console.log('\n=== Trello ===');
   console.log('Fiesta reads and writes one Trello board. Open the page below, create a Power-Up');
   console.log('if you have none, and copy its API key:');
   console.log('  https://trello.com/power-ups/admin');
-  const trelloKey = await password({ message: 'Trello API key:' });
-  console.log(
-    `\nNow open this URL and approve access:\n` +
-      `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=${trelloKey}\n`,
-  );
-  const trelloToken = await password({ message: 'Trello token:' });
+  const trelloCredentials = await askUntilValid({
+    attempts: CREDENTIAL_ATTEMPTS,
+    ask: async () => {
+      const key = await password({ message: 'Trello API key:' });
+      console.log(
+        `\nNow open this URL and approve access:\n` +
+          `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&key=${key}\n`,
+      );
+      return { key, token: await password({ message: 'Trello token:' }) };
+    },
+    verify: async ({ key, token }) => (await new TrelloClient({ key, token }).me()).username,
+    onError: reportRejected('Trello'),
+  });
 
+  const { key: trelloKey, token: trelloToken } = trelloCredentials.value;
   const trello = new TrelloClient({ key: trelloKey, token: trelloToken });
-  const me = await trello.me();
-  console.log(`Authenticated as ${me.username}.`);
+  console.log(`Authenticated as ${trelloCredentials.description}.`);
 
   const boards = await trello.boards();
   const boardId = await select({
@@ -120,11 +146,19 @@ async function main(): Promise<void> {
   console.log('  2. Send /newbot and follow the prompts (a display name, then a username ending in "bot").');
   console.log('  3. BotFather replies with the token — copy it.');
   console.log('Already have a bot? Send /token to @BotFather to see its token again.');
-  const telegramToken = await password({ message: 'Telegram bot token:' });
+  const telegramCredentials = await askUntilValid({
+    attempts: CREDENTIAL_ATTEMPTS,
+    ask: () => password({ message: 'Telegram bot token:' }),
+    verify: async (token) => (await new TelegramClient(token).getMe()).username,
+    onError: reportRejected('The Telegram bot token'),
+  });
+
+  const telegramToken = telegramCredentials.value;
   const telegram = new TelegramClient(telegramToken);
-  const bot = await telegram.getMe();
-  console.log(`Bot @${bot.username} reachable.`);
-  await confirm({ message: `Send any message to @${bot.username}, then confirm here.` });
+  console.log(`Bot @${telegramCredentials.description} reachable.`);
+  await confirm({
+    message: `Send any message to @${telegramCredentials.description}, then confirm here.`,
+  });
   const chatId = await detectChatId(telegram, 0, { attempts: 30, delayMs: 1000 });
   console.log(`Detected chat id ${chatId}.`);
 
@@ -132,8 +166,15 @@ async function main(): Promise<void> {
   console.log('Agents push branches and open draft pull requests as you, so the token needs');
   console.log('the "repo" scope. Create one here — the scope is preselected:');
   console.log('  https://github.com/settings/tokens/new?scopes=repo&description=fiesta');
-  const githubToken = await password({ message: 'GitHub token:' });
-  const owner = (await new GitHubClient({ token: githubToken, owner: '' }).user()).login;
+  const githubCredentials = await askUntilValid({
+    attempts: CREDENTIAL_ATTEMPTS,
+    ask: () => password({ message: 'GitHub token:' }),
+    verify: async (token) => (await new GitHubClient({ token, owner: '' }).user()).login,
+    onError: reportRejected('The GitHub token'),
+  });
+
+  const githubToken = githubCredentials.value;
+  const owner = githubCredentials.description;
   console.log(`Authenticated as ${owner}.`);
 
   console.log('\n=== Paths ===');
