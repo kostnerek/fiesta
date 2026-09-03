@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { banner, startupLines } from './banner.js';
 import { Dispatcher } from './dispatcher.js';
 import { loadConfig } from './config.js';
 import { Escalator } from './escalator.js';
@@ -16,7 +19,29 @@ import {
   writeAgentEnvFile,
 } from './workspace.js';
 
+async function readVersion(): Promise<string> {
+  try {
+    const path = fileURLToPath(new URL('../package.json', import.meta.url));
+    return (JSON.parse(await readFile(path, 'utf8')) as { version?: string }).version ?? '';
+  } catch {
+    return '';
+  }
+}
+
 const config = loadConfig(process.env);
+
+for (const line of banner()) {
+  console.log(line);
+}
+console.log('');
+for (const line of startupLines({
+  config,
+  projects: Object.keys(await readProjects(config.paths.root)).sort(),
+  version: await readVersion(),
+})) {
+  console.log(line);
+}
+console.log('');
 
 const trello = new TrelloClient({ key: config.trello.key, token: config.trello.token });
 const herdr = new HerdrClient();
