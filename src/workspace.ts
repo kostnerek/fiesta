@@ -89,8 +89,8 @@ export async function ensureMirror(params: {
       '-C',
       mirrorPath,
       'fetch',
+      '--prune',
       params.source.localPath,
-      '+refs/heads/*:refs/heads/*',
       '+refs/remotes/origin/*:refs/heads/*',
     ]);
     return mirrorPath;

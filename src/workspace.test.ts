@@ -209,3 +209,46 @@ describe('ensureMirror credential handling', () => {
     expect(inspected).not.toContain(credentials);
   });
 });
+
+describe('ensureMirror from a clone already on the machine', () => {
+  it('mirrors a working clone that has both local and remote-tracking branches', async () => {
+    const localClone = join(root, 'their-checkout');
+    await run('git', ['clone', originPath, localClone]);
+    await run('git', ['-C', localClone, 'config', 'user.email', 't@t']);
+    await run('git', ['-C', localClone, 'config', 'user.name', 't']);
+
+    const source = { dir: REPO, owner: OWNER, repo: REPO, localPath: localClone };
+    const mirror = await ensureMirror({ root, source, token: 'unused-token' });
+
+    const { stdout } = await run('git', ['-C', mirror, 'branch', '--list']);
+    expect(stdout).toMatch(/main/);
+  });
+
+  it('branches from the remote state, not from unpushed local commits', async () => {
+    const localClone = join(root, 'their-checkout-2');
+    await run('git', ['clone', originPath, localClone]);
+    await run('git', ['-C', localClone, 'config', 'user.email', 't@t']);
+    await run('git', ['-C', localClone, 'config', 'user.name', 't']);
+    await writeFile(join(localClone, 'UNPUSHED.md'), 'local only\n');
+    await run('git', ['-C', localClone, 'add', '.']);
+    await run('git', ['-C', localClone, 'commit', '-m', 'unpushed work']);
+
+    const source = { dir: REPO, owner: OWNER, repo: REPO, localPath: localClone };
+    const mirror = await ensureMirror({ root, source, token: 'unused-token' });
+    const path = await prepareWorkspace({ root, mirrorPath: mirror, source, ticket });
+
+    await expect(stat(join(path, 'UNPUSHED.md'))).rejects.toThrow();
+  });
+
+  it('picks up a branch the developer never checked out locally', async () => {
+    await run('git', ['-C', originPath, 'branch', 'release']);
+    const localClone = join(root, 'their-checkout-3');
+    await run('git', ['clone', originPath, localClone]);
+
+    const source = { dir: REPO, owner: OWNER, repo: REPO, localPath: localClone };
+    const mirror = await ensureMirror({ root, source, token: 'unused-token' });
+
+    const { stdout } = await run('git', ['-C', mirror, 'branch', '--list', 'release']);
+    expect(stdout.trim()).toMatch(/release/);
+  });
+});
