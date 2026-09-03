@@ -399,3 +399,45 @@ setup, nie po nazwie w czasie działania), `MAX_ACTIVE` (1), `TICKET_TIMEOUT`
 - Sposób trwałej instalacji herdr na Unraidzie (kontener vs user-script).
 - Klon vs worktree dla dużych repo.
 - Dostęp agentów do stacku tsoft i izolacja portów przy wielu środowiskach.
+
+## 13. Znane ryzyka przed pierwszym uruchomieniem
+
+Ustalone przez przegląd całej gałęzi. Uszeregowane; pierwsze dwa rozstrzygnij, zanim
+uznasz system za działający.
+
+1. **Uid w kontenerze kontra właściciel katalogu roboczego.** Obraz agenta działa jako
+   uid 1001, a `/workspace` tworzy daemon jako użytkownik hosta. `safe.directory`
+   w entrypoincie ucisza ostrzeżenie gita o właścicielu, ale nie nadaje uprawnień —
+   agent wywali się na pierwszym `git add`. Prawdopodobne rozwiązanie: `--user $(id -u):$(id -g)`
+   w `buildAgentCommand` albo `chown` katalogu po `prepareWorkspace`. Do sprawdzenia na
+   realnym hoście.
+2. **Brak timeoutów na wywołaniach sieciowych i `execFile`.** Zawieszone połączenie do
+   Trello, Telegrama, GitHuba albo zawieszony `git`/`herdr` parkuje `await` w środku cyklu
+   na zawsze. Licznik nieudanych cykli nie wzrośnie, alert nie poleci, daemon będzie
+   wyglądał na działający i nie zrobi nic. To ostatni ocalały przypadek awarii, przed którą
+   ten system ma chronić. Rozwiązanie: `AbortSignal.timeout()` przy każdym `fetch`,
+   `timeout` przy każdym `execFileAsync`.
+3. **Sygnał życia jedzie kanałem, który najpewniej padnie.** `deliverReplies` jest
+   wołane wcześnie w cyklu i nie jest osobno osłonięte, więc awaria Telegrama psuje każdy
+   cykl — a alert po 5 nieudanych cyklach leci tym samym, martwym Telegramem.
+4. **Karta po timeoucie parkuje w `Blocked` bezterminowo**, trzymając jedyny slot przy
+   `MAX_ACTIVE=1`, i po pierwszej eskalacji nic już nie przypomina.
+5. **Plik z tokenem przeżywa ticket, który nie został zmergowany.** `removeWorkspace`
+   woła tylko `closeMerged`, więc karta porzucona w `Backlog`/`Blocked` zostawia
+   `<root>/env/<shortLink>.env` z żywym tokenem (0600) na stałe.
+6. **Nieudany dispatch po częściowej pracy gubi workspace'y herdr** — trzy próby tworzą
+   trzy workspace'y z tym samym labelem, których nic potem nie sprząta.
+7. **`git clone --mirror` ciągnie `refs/pull/*`.** Przy dużym repo (tsoft) pierwszy klon
+   i każdy `fetch` są zauważalnie cięższe niż przy zwykłym klonie.
+
+## 14. Rozważone i odrzucone
+
+**`oh-my-claudecode` / `/autopilot` jako skill autonomii** (decyzja: 2026-09-03).
+`orchestrate-ticket` jest **protokołem z daemonem** — dokładnie jeden marker `@@FIESTA:`
+na turę, parsowany przez `markers.ts` — plus polityką eskalacji, a nie strategią dowożenia
+zadania. Agent bez markerów wygląda dla daemona jak agent, który zamilkł, i po timeoucie
+zostaje zabity jako `FAIL`, choćby zrobił robotę idealnie. Eskalacja w OMC jest
+nieudokumentowana, a jego główna wartość to tryby równoległe, których ten design świadomie
+nie używa (wspólny `/workspace`, `MAX_ACTIVE=1`, współdzielone poświadczenia Claude).
+Do rozważenia ponownie wyłącznie jako warstwa **pod** krokiem „zaimplementuj", po
+przejściu smoke testu — wtedy protokół zostaje nasz, a grind jest ich.
