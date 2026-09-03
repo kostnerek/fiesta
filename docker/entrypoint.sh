@@ -5,8 +5,8 @@ set -euo pipefail
 : "${GITHUB_OWNER:?missing — the agent cannot open a PR without it}"
 : "${FIESTA_PROMPT_B64:?missing — there is no ticket to work on}"
 
-git config --global user.name "fiesta-agent"
-git config --global user.email "fiesta-agent@localhost"
+git config --global user.name "$GITHUB_OWNER"
+git config --global user.email "$GITHUB_OWNER@users.noreply.github.com"
 git config --global --add safe.directory '*'
 
 git config --global credential.https://github.com.helper \

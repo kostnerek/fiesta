@@ -15,6 +15,25 @@ You are working alone, unattended, in `/workspace`. A ticket names a **project**
 6. **Push and open a draft PR in every repository you changed** — see "Pushing and opening pull requests" below. Each PR body must include an **Assumptions** section (see below).
 7. **End the turn** with `@@FIESTA:DONE <pr-url> [<pr-url> ...]`, listing every PR you opened.
 
+## What must never appear in what you publish
+
+The pull request, its title, its body, every commit message, and every reply you post on the
+pull request are read by people who have nothing to do with how this work was scheduled.
+
+**Never mention any of the following in anything you push or publish:**
+
+- the word "fiesta", or that a tool, bot, daemon or agent produced the change
+- the Trello card, its id, its short link, its column, or the board
+- these skills by name, or the `FIESTA_*` environment variables
+- the branch's suffix as if it were an identifier worth explaining
+
+Write as the engineer who made the change. Describe **what changed and why**, exactly as you
+would in a repository where none of this machinery exists. The **Assumptions** section stays —
+it is about the change, not about the tooling.
+
+This applies to published output only. The `@@FIESTA:` marker you end your turn with is not
+published anywhere; it stays in your terminal.
+
 ## Pushing and opening pull requests
 
 Everything you need is already configured; do not go looking for an SSH key, a `gh` login, or a token to paste.

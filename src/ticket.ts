@@ -26,9 +26,12 @@ export class TicketError extends Error {
   }
 }
 
+import { createHash } from 'node:crypto';
+
 const BASE_BRANCH_LINE = /^base:[ \t]*(\S+)[ \t]*$/m;
 const SHORT_LINK = /^[A-Za-z0-9]+$/;
 const MAX_SLUG_LENGTH = 40;
+const BRANCH_SUFFIX_LENGTH = 6;
 
 function slugify(title: string): string {
   return title
@@ -37,6 +40,12 @@ function slugify(title: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, MAX_SLUG_LENGTH)
     .replace(/-+$/g, '');
+}
+
+export function branchName(shortLink: string, title: string): string {
+  const suffix = createHash('sha256').update(shortLink).digest('hex').slice(0, BRANCH_SUFFIX_LENGTH);
+  const slug = slugify(title);
+  return slug ? `${slug}-${suffix}` : suffix;
 }
 
 export function toTicket(card: TrelloCard): Ticket {
@@ -66,6 +75,6 @@ export function toTicket(card: TrelloCard): Ticket {
     description: card.desc,
     project,
     baseBranch,
-    branch: `fiesta/${card.shortLink}-${slugify(card.name)}`,
+    branch: branchName(card.shortLink, card.name),
   };
 }

@@ -27,9 +27,27 @@ describe('toTicket', () => {
     expect(toTicket(card).baseBranch).toBe('develop');
   });
 
-  it('builds a deterministic branch name from shortLink and title', () => {
+  it('builds a branch name that names neither the tool nor the card', () => {
+    const branch = toTicket(makeCard({ name: 'Add HELLO file, please!' })).branch;
+
+    expect(branch).toMatch(/^add-hello-file-please-[0-9a-f]{6}$/);
+    expect(branch).not.toContain('fiesta');
+    expect(branch).not.toContain('aBcD1234');
+  });
+
+  it('is deterministic, so a rerun lands on the same branch', () => {
     const card = makeCard({ name: 'Add HELLO file, please!' });
-    expect(toTicket(card).branch).toBe('fiesta/aBcD1234-add-hello-file-please');
+    expect(toTicket(card).branch).toBe(toTicket(card).branch);
+  });
+
+  it('distinguishes two cards that happen to share a title', () => {
+    const first = toTicket(makeCard({ name: 'Same title', shortLink: 'aaaa1111' }));
+    const second = toTicket(makeCard({ name: 'Same title', shortLink: 'bbbb2222' }));
+    expect(first.branch).not.toBe(second.branch);
+  });
+
+  it('still produces a usable branch for a title with no usable characters', () => {
+    expect(toTicket(makeCard({ name: '!!!' })).branch).toMatch(/^[0-9a-f]{6}$/);
   });
 
   it('rejects a card with no label', () => {

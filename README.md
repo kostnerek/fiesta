@@ -207,6 +207,14 @@ instead of being cycled back by the orphan rule.
 Optionally add a line `base: <branch>` to the card description to target a
 base branch other than `main`.
 
+**Nothing the agent publishes names this tooling.** The branch is
+`<slug-of-title>-<6 hex>`, where the suffix is derived from the card so a
+rerun lands on the same branch — it is not the card id and does not contain
+it. Commits are authored as the GitHub user whose token opened the PR, and
+the skill forbids mentioning the tool, the board, the card or these
+environment variables in a PR title, body, commit message or review reply.
+A reviewer sees an ordinary branch from an ordinary colleague.
+
 ## Attaching to a running agent
 
 Each in-progress card gets a herdr workspace labeled with the card's Trello
