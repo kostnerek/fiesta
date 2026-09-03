@@ -84,7 +84,7 @@ export async function ensureMirror(params: {
   }
 
   await mkdir(join(params.root, 'repos'), { recursive: true });
-  await git(['clone', remote, mirrorPath], { env, secrets });
+  await git(['clone', '--mirror', remote, mirrorPath], { env, secrets });
   return mirrorPath;
 }
 

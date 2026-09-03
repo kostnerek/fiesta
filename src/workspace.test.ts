@@ -9,26 +9,66 @@ import type { Ticket } from './ticket.js';
 
 const run = promisify(execFile);
 
+const OWNER = 'someowner';
+const REPO = 'demo';
+
 let root: string;
 let mirrorPath: string;
+let originPath: string;
+let originalGitConfigGlobal: string | undefined;
 
 const ticket: Ticket = {
   cardId: 'card-1',
   shortLink: 'aBcD1234',
   title: 'Add HELLO file',
   description: '',
-  repo: 'demo',
+  repo: REPO,
   baseBranch: 'main',
   branch: 'fiesta/aBcD1234-add-hello-file',
 };
 
+async function commit(repoPath: string, message: string): Promise<void> {
+  await run('git', ['-C', repoPath, 'add', '.']);
+  await run('git', [
+    '-C', repoPath, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', message,
+  ]);
+}
+
+async function buildOrigin(): Promise<void> {
+  await run('git', ['init', '--initial-branch=main', originPath]);
+  await writeFile(join(originPath, 'README.md'), 'demo\n');
+  await commit(originPath, 'init');
+  await run('git', ['-C', originPath, 'checkout', '-b', 'develop']);
+  await writeFile(join(originPath, 'DEVELOP.md'), 'from develop\n');
+  await commit(originPath, 'develop commit');
+  await run('git', ['-C', originPath, 'checkout', 'main']);
+}
+
+async function redirectGitHubToOrigin(): Promise<void> {
+  const configPath = join(root, 'gitconfig');
+  await writeFile(
+    configPath,
+    `[url "${originPath}"]\n\tinsteadOf = https://github.com/${OWNER}/${REPO}.git\n`,
+  );
+  originalGitConfigGlobal = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = configPath;
+}
+
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'fiesta-'));
-  mirrorPath = join(root, 'repos', 'demo');
-  await run('git', ['init', '--initial-branch=main', mirrorPath]);
-  await writeFile(join(mirrorPath, 'README.md'), 'demo\n');
-  await run('git', ['-C', mirrorPath, 'add', '.']);
-  await run('git', ['-C', mirrorPath, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-m', 'init']);
+  originPath = join(root, 'origin', REPO);
+  await mkdir(join(root, 'origin'), { recursive: true });
+  await buildOrigin();
+  await redirectGitHubToOrigin();
+  mirrorPath = await ensureMirror({ root, owner: OWNER, repo: REPO, token: 'unused-token' });
+});
+
+afterEach(() => {
+  if (originalGitConfigGlobal === undefined) {
+    delete process.env.GIT_CONFIG_GLOBAL;
+  } else {
+    process.env.GIT_CONFIG_GLOBAL = originalGitConfigGlobal;
+  }
 });
 
 describe('prepareWorkspace', () => {
@@ -49,23 +89,7 @@ describe('prepareWorkspace', () => {
     expect(await readFile(join(second, 'scratch.txt'), 'utf8')).toBe('kept\n');
   });
 
-  it('checks out from a non-default base branch', async () => {
-    await run('git', ['-C', mirrorPath, 'checkout', '-b', 'develop']);
-    await writeFile(join(mirrorPath, 'DEVELOP.md'), 'from develop\n');
-    await run('git', ['-C', mirrorPath, 'add', '.']);
-    await run('git', [
-      '-C',
-      mirrorPath,
-      '-c',
-      'user.email=t@t',
-      '-c',
-      'user.name=t',
-      'commit',
-      '-m',
-      'develop commit',
-    ]);
-    await run('git', ['-C', mirrorPath, 'checkout', 'main']);
-
+  it('checks out from a non-default base branch of a mirror ensureMirror actually produced', async () => {
     const developTicket: Ticket = {
       ...ticket,
       shortLink: 'devBranch1',
@@ -78,6 +102,28 @@ describe('prepareWorkspace', () => {
     const { stdout } = await run('git', ['-C', path, 'rev-parse', '--abbrev-ref', 'HEAD']);
     expect(stdout.trim()).toBe('fiesta/devBranch1-add-hello-file');
     expect(await readFile(join(path, 'DEVELOP.md'), 'utf8')).toBe('from develop\n');
+  });
+});
+
+describe('ensureMirror', () => {
+  it('mirrors every branch of the remote, not only the default one', async () => {
+    const { stdout } = await run('git', [
+      '-C', mirrorPath, 'for-each-ref', '--format=%(refname)', 'refs/heads',
+    ]);
+    expect(stdout.split('\n').map((line) => line.trim())).toEqual(
+      expect.arrayContaining(['refs/heads/main', 'refs/heads/develop']),
+    );
+  });
+
+  it('fetches into an existing mirror instead of recloning', async () => {
+    await writeFile(join(originPath, 'LATER.md'), 'later\n');
+    await commit(originPath, 'later commit');
+
+    const again = await ensureMirror({ root, owner: OWNER, repo: REPO, token: 'unused-token' });
+
+    expect(again).toBe(mirrorPath);
+    const path = await prepareWorkspace({ root, mirrorPath, ticket });
+    expect(await readFile(join(path, 'LATER.md'), 'utf8')).toBe('later\n');
   });
 });
 
