@@ -79,6 +79,20 @@ export class GitHubClient {
     return this.request('/user');
   }
 
+  async tokenScopes(): Promise<string[]> {
+    const response = await this.fetchImpl('https://api.github.com/user', {
+      headers: {
+        authorization: `Bearer ${this.credentials.token}`,
+        accept: 'application/vnd.github+json',
+      },
+    });
+    const header = response.headers.get('x-oauth-scopes') ?? '';
+    return header
+      .split(',')
+      .map((scope) => scope.trim())
+      .filter((scope) => scope.length > 0);
+  }
+
   async findPrByBranch(owner: string, repo: string, branch: string): Promise<PullRequest | null> {
     const query = new URLSearchParams({
       head: `${owner}:${branch}`,

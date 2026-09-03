@@ -29,3 +29,24 @@ describe('GitHubClient', () => {
     await expect(client.findPrByBranch('kostnerek', 'demo', 'nope')).resolves.toBeNull();
   });
 });
+
+describe('tokenScopes', () => {
+  it('reads the scopes GitHub reports for the token', async () => {
+    const fetchImpl = (async () =>
+      new Response('{"login":"kostnerek"}', {
+        status: 200,
+        headers: { 'x-oauth-scopes': 'repo, read:packages' },
+      })) as unknown as typeof fetch;
+
+    const client = new GitHubClient({ token: 't', owner: 'o' }, fetchImpl);
+    await expect(client.tokenScopes()).resolves.toEqual(['repo', 'read:packages']);
+  });
+
+  it('is empty for a token GitHub reports no scopes for', async () => {
+    const fetchImpl = (async () =>
+      new Response('{"login":"kostnerek"}', { status: 200 })) as unknown as typeof fetch;
+
+    const client = new GitHubClient({ token: 't', owner: 'o' }, fetchImpl);
+    await expect(client.tokenScopes()).resolves.toEqual([]);
+  });
+});

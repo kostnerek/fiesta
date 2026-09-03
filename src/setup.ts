@@ -100,6 +100,7 @@ async function requireSignedInClaude(directory: string): Promise<void> {
 }
 
 const CREDENTIAL_ATTEMPTS = 3;
+const REQUIRED_GITHUB_SCOPES = ['repo', 'read:packages'];
 
 function reportRejected(what: string) {
   return (message: string, attemptsLeft: number): void => {
@@ -173,16 +174,25 @@ async function main(): Promise<void> {
   console.log(`Detected chat id ${chatId}.`);
 
   console.log('\n=== GitHub ===');
-  console.log('Agents push branches and open draft pull requests as you, so the token needs');
-  console.log('the "repo" scope. Create one here — the scope is preselected:');
-  console.log('  https://github.com/settings/tokens/new?scopes=repo&description=fiesta');
+  console.log('Agents push branches and open draft pull requests as you, and install private');
+  console.log('packages from GitHub Packages, so the token needs "repo" and "read:packages".');
+  console.log('Create one here — both scopes are preselected:');
+  console.log('  https://github.com/settings/tokens/new?scopes=repo,read:packages&description=fiesta');
   const githubCredentials = await askUntilValid({
     attempts: CREDENTIAL_ATTEMPTS,
     ask: () => password({ message: 'GitHub token:' }),
-    verify: async (token) => (await new GitHubClient({ token, owner: '' }).user()).login,
+    verify: async (token) => {
+      const client = new GitHubClient({ token, owner: '' });
+      const login = (await client.user()).login;
+      const scopes = await client.tokenScopes();
+      const missing = REQUIRED_GITHUB_SCOPES.filter((scope) => !scopes.includes(scope));
+      if (missing.length > 0) {
+        throw new Error(`the token is missing the ${missing.join(' and ')} scope`);
+      }
+      return login;
+    },
     onError: reportRejected('The GitHub token'),
   });
-
   const githubToken = githubCredentials.value;
   const owner = githubCredentials.description;
   console.log(`Authenticated as ${owner}.`);
