@@ -9,7 +9,7 @@ git config --global user.name "fiesta-agent"
 git config --global user.email "fiesta-agent@localhost"
 git config --global --add safe.directory /workspace
 
-git config --global credential.helper \
+git config --global credential.https://github.com.helper \
   '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
 
 echo "$FIESTA_PROMPT_B64" | base64 -d > /tmp/prompt.txt
