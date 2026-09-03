@@ -92,36 +92,34 @@ export function remoteUrl(owner: string, repo: string): string {
   return `https://github.com/${owner}/${repo}.git`;
 }
 
+export function workspaceRoot(root: string, shortLink: string): string {
+  return join(root, 'work', shortLink);
+}
+
 export async function prepareWorkspace(params: {
   root: string;
   mirrorPath: string;
   owner: string;
+  repo: string;
   ticket: Ticket;
 }): Promise<string> {
-  const workspacePath = join(params.root, 'work', params.ticket.shortLink);
-  if (await exists(workspacePath)) {
-    return workspacePath;
+  const checkoutPath = join(workspaceRoot(params.root, params.ticket.shortLink), params.repo);
+  if (await exists(checkoutPath)) {
+    return checkoutPath;
   }
 
-  await mkdir(join(params.root, 'work'), { recursive: true });
-  await git(['clone', '--local', params.mirrorPath, workspacePath]);
+  await mkdir(workspaceRoot(params.root, params.ticket.shortLink), { recursive: true });
+  await git(['clone', '--local', params.mirrorPath, checkoutPath]);
   await git([
     '-C',
-    workspacePath,
+    checkoutPath,
     'checkout',
     '-B',
     params.ticket.branch,
     `origin/${params.ticket.baseBranch}`,
   ]);
-  await git([
-    '-C',
-    workspacePath,
-    'remote',
-    'set-url',
-    'origin',
-    remoteUrl(params.owner, params.ticket.repo),
-  ]);
-  return workspacePath;
+  await git(['-C', checkoutPath, 'remote', 'set-url', 'origin', remoteUrl(params.owner, params.repo)]);
+  return checkoutPath;
 }
 
 export function agentEnvPath(root: string, shortLink: string): string {
@@ -132,13 +130,15 @@ export async function writeAgentEnvFile(params: {
   root: string;
   owner: string;
   token: string;
+  repos: string[];
   ticket: Ticket;
 }): Promise<string> {
   const path = agentEnvPath(params.root, params.ticket.shortLink);
   const body = [
     `GITHUB_TOKEN=${params.token}`,
     `GITHUB_OWNER=${params.owner}`,
-    `FIESTA_REPO=${params.ticket.repo}`,
+    `FIESTA_PROJECT=${params.ticket.project}`,
+    `FIESTA_REPOS=${params.repos.join(',')}`,
     `FIESTA_BASE_BRANCH=${params.ticket.baseBranch}`,
     '',
   ].join('\n');

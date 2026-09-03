@@ -1,25 +1,34 @@
 import type { Ticket } from './ticket.js';
 
-export function buildPrompt(ticket: Ticket, owner: string): string {
+export function buildPrompt(ticket: Ticket, owner: string, repos: string[]): string {
+  const checkouts = repos.map((repo) => `  /workspace/${repo}  ->  github.com/${owner}/${repo}`);
+
   return [
     'Use the orchestrate-ticket skill to deliver this ticket end to end.',
     '',
-    `Repository: ${ticket.repo}`,
+    `Project: ${ticket.project}`,
     `Base branch: ${ticket.baseBranch}`,
-    `Working branch: ${ticket.branch} (already checked out in /workspace)`,
+    `Working branch: ${ticket.branch}`,
+    '',
+    'Repositories, each already cloned and on the working branch:',
+    ...checkouts,
     '',
     `Title: ${ticket.title}`,
     '',
     'Description and acceptance criteria:',
     ticket.description,
     '',
-    'Pushing and opening the PR:',
-    `- origin already points at https://github.com/${owner}/${ticket.repo}.git and git is`,
-    '  pre-authenticated for it, so `git push -u origin HEAD` works with no extra setup.',
-    '- There is no gh CLI in this container. Open the draft PR with the GitHub REST API',
-    '  using curl and jq, as described in the orchestrate-ticket skill.',
-    `- GITHUB_OWNER (${owner}), FIESTA_REPO (${ticket.repo}) and FIESTA_BASE_BRANCH`,
-    `  (${ticket.baseBranch}) are set in your environment, alongside GITHUB_TOKEN.`,
+    'Pushing and opening pull requests:',
+    '- Change only the repositories this ticket actually needs. Leaving one untouched is',
+    '  the normal case, not a failure.',
+    '- In each repository you changed, `git push -u origin HEAD` works with no extra setup,',
+    '  because origin already points at GitHub and git is pre-authenticated.',
+    '- Open one draft PR per changed repository. There is no gh CLI in this container, so',
+    '  use the GitHub REST API with curl and jq, as described in the orchestrate-ticket skill.',
+    '- End your turn listing every PR URL you opened.',
+    `- GITHUB_OWNER (${owner}), FIESTA_PROJECT (${ticket.project}), FIESTA_REPOS`,
+    `  (${repos.join(',')}) and FIESTA_BASE_BRANCH (${ticket.baseBranch}) are set in your`,
+    '  environment, alongside GITHUB_TOKEN.',
   ].join('\n');
 }
 

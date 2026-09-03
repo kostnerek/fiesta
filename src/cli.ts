@@ -4,10 +4,11 @@ import { join } from 'node:path';
 const USAGE = `fiesta — autonomous coding agents driven by a Trello board
 
 Usage:
-  fiesta setup    Collect and verify credentials, seed the board, write .env
-  fiesta start    Run the daemon
+  fiesta setup             Collect and verify credentials, seed the board, write .env
+  fiesta start             Run the daemon
+  fiesta project ...       Manage projects (a label names a project, not a repository)
 
-Run setup once on the server, then start.`;
+Run setup once on the server, add a project, then start.`;
 
 function loadEnvFile(): void {
   try {
@@ -17,16 +18,49 @@ function loadEnvFile(): void {
   }
 }
 
-const command = process.argv[2];
+async function runProject(args: string[]): Promise<number> {
+  const { loadConfig } = await import('./config.js');
+  const { GitHubClient } = await import('./github.js');
+  const { TrelloClient } = await import('./trello.js');
+  const { runProjectCommand } = await import('./project-command.js');
 
-if (command === 'setup') {
-  loadEnvFile();
-  await import('./setup.js');
-} else if (command === 'start') {
-  loadEnvFile();
-  await import('./main.js');
-} else {
-  const askedForHelp = command === undefined || command === '--help' || command === '-h';
-  console.log(askedForHelp ? USAGE : `Unknown command: ${command}\n\n${USAGE}`);
-  process.exit(askedForHelp ? 0 : 1);
+  const config = loadConfig(process.env);
+  const github = new GitHubClient({ token: config.github.token, owner: config.github.owner });
+  const trello = new TrelloClient({ key: config.trello.key, token: config.trello.token });
+
+  return runProjectCommand(args, {
+    root: config.paths.root,
+    repoExists: (repo) => github.repoExists(repo),
+    ensureLabel: async (name) => {
+      const existing = await trello.labels(config.trello.boardId);
+      if (existing.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
+        return false;
+      }
+      await trello.createLabel(config.trello.boardId, name);
+      return true;
+    },
+    log: (line) => console.log(line),
+  });
+}
+
+const [command, ...rest] = process.argv.slice(2);
+
+try {
+  if (command === 'setup') {
+    loadEnvFile();
+    await import('./setup.js');
+  } else if (command === 'start') {
+    loadEnvFile();
+    await import('./main.js');
+  } else if (command === 'project') {
+    loadEnvFile();
+    process.exit(await runProject(rest));
+  } else {
+    const askedForHelp = command === undefined || command === '--help' || command === '-h';
+    console.log(askedForHelp ? USAGE : `Unknown command: ${command}\n\n${USAGE}`);
+    process.exit(askedForHelp ? 0 : 1);
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
 }

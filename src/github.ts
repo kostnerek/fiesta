@@ -31,6 +31,25 @@ export class GitHubClient {
     return (await response.json()) as T;
   }
 
+  async repoExists(repo: string): Promise<boolean> {
+    const response = await this.fetchImpl(
+      `https://api.github.com/repos/${this.credentials.owner}/${repo}`,
+      {
+        headers: {
+          authorization: `Bearer ${this.credentials.token}`,
+          accept: 'application/vnd.github+json',
+        },
+      },
+    );
+    if (response.status === 404) {
+      return false;
+    }
+    if (!response.ok) {
+      throw new Error(`GitHub GET /repos/${this.credentials.owner}/${repo} failed: ${response.status}`);
+    }
+    return true;
+  }
+
   user(): Promise<{ login: string }> {
     return this.request('/user');
   }

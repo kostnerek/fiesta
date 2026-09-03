@@ -8,7 +8,7 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     shortLink: 'aBcD1234',
     title: 'Add HELLO file',
     description: 'Create HELLO.md at the repo root.',
-    repo: 'demo',
+    project: 'demo',
     baseBranch: 'main',
     branch: 'fiesta/aBcD1234-add-hello-file',
     ...overrides,
@@ -16,10 +16,10 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
 }
 
 describe('buildPrompt', () => {
-  it('includes the repo, base branch, working branch, title and description', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek');
+  it('includes the project, base branch, working branch, title and description', () => {
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
 
-    expect(prompt).toContain('Repository: demo');
+    expect(prompt).toContain('Project: demo');
     expect(prompt).toContain('Base branch: main');
     expect(prompt).toContain('Working branch: fiesta/aBcD1234-add-hello-file');
     expect(prompt).toContain('Title: Add HELLO file');
@@ -27,13 +27,12 @@ describe('buildPrompt', () => {
   });
 
   it('tells the agent how to push and open the PR without a gh CLI', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek');
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
 
-    expect(prompt).toContain('https://github.com/kostnerek/demo.git');
     expect(prompt).toContain('git push -u origin HEAD');
     expect(prompt).toMatch(/no gh CLI/i);
     expect(prompt).toContain('GITHUB_OWNER (kostnerek)');
-    expect(prompt).toContain('FIESTA_REPO (demo)');
+    expect(prompt).toContain('FIESTA_REPOS');
   });
 });
 
@@ -43,7 +42,7 @@ describe('buildAgentCommand', () => {
       workspacePath: '/root/work/aBcD1234',
       claudeCredentials: '/creds',
       envFilePath: '/root/env/aBcD1234.env',
-      prompt: buildPrompt(makeTicket(), 'kostnerek'),
+      prompt: buildPrompt(makeTicket(), 'kostnerek', ['demo']),
       ...overrides,
     });
   }
@@ -70,12 +69,29 @@ describe('buildAgentCommand', () => {
   });
 
   it('carries the prompt as base64 in FIESTA_PROMPT_B64 and it decodes back to buildPrompt output', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek');
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
     const command = build({ prompt });
 
     const match = /FIESTA_PROMPT_B64=(\S+)/.exec(command);
     expect(match).not.toBeNull();
     const decoded = Buffer.from(match![1]!, 'base64').toString('utf8');
     expect(decoded).toBe(prompt);
+  });
+});
+
+describe('buildPrompt across several repositories', () => {
+  it('lists a checkout path per repository of the project', () => {
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['platform', 'backoffice']);
+
+    expect(prompt).toContain('/workspace/platform  ->  github.com/kostnerek/platform');
+    expect(prompt).toContain('/workspace/backoffice  ->  github.com/kostnerek/backoffice');
+    expect(prompt).toContain('FIESTA_REPOS');
+  });
+
+  it('tells the agent that leaving a repository untouched is normal', () => {
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['platform', 'backoffice']);
+
+    expect(prompt).toMatch(/Leaving one untouched is/);
+    expect(prompt).toMatch(/one draft PR per changed repository/i);
   });
 });

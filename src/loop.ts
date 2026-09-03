@@ -3,6 +3,7 @@ import type { Dispatcher } from './dispatcher.js';
 import type { ActiveTicket, Escalator } from './escalator.js';
 import type { GitHubClient } from './github.js';
 import type { Marker } from './markers.js';
+import type { readProjects, resolveProject } from './projects.js';
 import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TelegramClient } from './telegram.js';
@@ -43,6 +44,7 @@ export class Loop {
       trello: TrelloClient;
       herdr: HerdrClient;
       github: GitHubClient;
+      projects: { readProjects: typeof readProjects; resolveProject: typeof resolveProject };
       dispatcher: Dispatcher;
       escalator: Escalator;
       telegram: TelegramClient;
@@ -224,12 +226,24 @@ export class Loop {
         if (!ticket) {
           continue;
         }
-        const pr = await github.findPrByBranch(ticket.repo, ticket.branch);
-        if (!pr?.merged) {
+
+        const repos = this.deps.projects.resolveProject(
+          await this.deps.projects.readProjects(config.paths.root),
+          ticket.project,
+        );
+        const found = [];
+        for (const repo of repos) {
+          const pr = await github.findPrByBranch(repo, ticket.branch);
+          if (pr) {
+            found.push(pr);
+          }
+        }
+        if (found.length === 0 || found.some((pr) => !pr.merged)) {
           continue;
         }
+
         await trello.moveCard(card.id, config.trello.lists.done);
-        await trello.addComment(card.id, `🤖 Merged: ${pr.url}`);
+        await trello.addComment(card.id, `🤖 Merged: ${found.map((pr) => pr.url).join(', ')}`);
         const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
         if (workspace) {
           await herdr.killWorkspace(workspace.id);

@@ -49,6 +49,17 @@ export class TrelloClient {
     return this.request('/lists', { method: 'POST', params: { name, idBoard: boardId } });
   }
 
+  labels(boardId: string): Promise<{ id: string; name: string }[]> {
+    return this.request(`/boards/${boardId}/labels`, { params: { fields: 'id,name' } });
+  }
+
+  createLabel(boardId: string, name: string): Promise<{ id: string; name: string }> {
+    return this.request('/labels', {
+      method: 'POST',
+      params: { name, color: 'green', idBoard: boardId },
+    });
+  }
+
   cardsInList(listId: string): Promise<TrelloCard[]> {
     return this.request(`/lists/${listId}/cards`, {
       params: { fields: 'id,shortLink,name,desc,idList', labels: 'all' },

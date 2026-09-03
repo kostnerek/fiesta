@@ -15,7 +15,7 @@ function makeCard(overrides: Partial<TrelloCard> = {}): TrelloCard {
 
 describe('toTicket', () => {
   it('takes the repo from the single label', () => {
-    expect(toTicket(makeCard()).repo).toBe('fiesta');
+    expect(toTicket(makeCard()).project).toBe('fiesta');
   });
 
   it('defaults the base branch to main', () => {

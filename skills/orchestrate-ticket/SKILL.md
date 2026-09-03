@@ -3,32 +3,37 @@ name: orchestrate-ticket
 description: Use when handed a Fiesta ticket to deliver end to end — plan, implement, verify, push and open a draft PR, ending the turn with exactly one @@FIESTA marker.
 ---
 
-You are working alone, unattended, in `/workspace` on the branch already checked out for this ticket. Nobody is watching this session. The only way a human learns what happened is what you write to the PR and the marker you end on.
+You are working alone, unattended, in `/workspace`. A ticket names a **project**, and a project is one or more repositories: `/workspace` holds one directory per repository, each already cloned and on this ticket's branch. Nobody is watching this session. The only way a human learns what happened is what you write to the PR and the marker you end on.
 
 ## Flow
 
 1. **Understand the ticket.** Read the title, description and acceptance criteria you were given in full before touching anything.
-2. **Learn the repo.** Read `CLAUDE.md` (or equivalent) if present, skim the test suite, and look at recent commits and existing code near the change to pick up naming, structure and conventions already in use. Don't guess a repo's style when you can read it.
+2. **Learn the repositories.** Work out which of them the ticket actually needs — often one, sometimes several, never necessarily all. For each one you will touch, read `CLAUDE.md` (or equivalent) if present, skim the test suite, and look at recent commits and existing code near the change to pick up naming, structure and conventions already in use. Don't guess a repo's style when you can read it.
 3. **Plan.** Decide the shape of the change before writing code — which files, which layer, what's in scope and what isn't.
 4. **Implement.** Make the change match the ticket and the repo's own conventions.
 5. **Verify.** Invoke the `verify-ticket` skill. Do not proceed past this step on anything less than a pass.
-6. **Push** the branch, and **open a draft PR** against the ticket's base branch — see "Pushing and opening the PR" below for the exact mechanism. The PR body must include an **Assumptions** section (see below).
-7. **End the turn** with `@@FIESTA:DONE <pr-url>`.
+6. **Push and open a draft PR in every repository you changed** — see "Pushing and opening pull requests" below. Each PR body must include an **Assumptions** section (see below).
+7. **End the turn** with `@@FIESTA:DONE <pr-url> [<pr-url> ...]`, listing every PR you opened.
 
-## Pushing and opening the PR
+## Pushing and opening pull requests
 
 Everything you need is already configured; do not go looking for an SSH key, a `gh` login, or a token to paste.
 
-- `origin` in `/workspace` points at `https://github.com/$GITHUB_OWNER/$FIESTA_REPO.git`, and a git credential helper backed by `$GITHUB_TOKEN` is already installed. So the push is just:
+`$FIESTA_REPOS` is a comma-separated list of this project's repositories, and each one is a directory under `/workspace`.
+
+**Only push repositories you actually changed.** Leaving one untouched is the normal case, not a failure — a ticket that needed a change in one repository produces one PR.
+
+- In each changed repository, `origin` already points at `https://github.com/$GITHUB_OWNER/<repo>.git` and a git credential helper backed by `$GITHUB_TOKEN` is installed, so the push is just:
 
   ```bash
-  git push -u origin HEAD
+  git -C /workspace/<repo> push -u origin HEAD
   ```
 
-- **There is no `gh` CLI in this container.** The image has `curl` and `jq`, so the draft PR is one REST call. `$GITHUB_OWNER`, `$FIESTA_REPO`, `$FIESTA_BASE_BRANCH` and `$GITHUB_TOKEN` are all in your environment:
+- **There is no `gh` CLI in this container.** The image has `curl` and `jq`, so each draft PR is one REST call. Run it once per changed repository, substituting that repository for `<repo>`:
 
   ```bash
-  BRANCH=$(git -C /workspace rev-parse --abbrev-ref HEAD)
+  REPO=<repo>
+  BRANCH=$(git -C /workspace/$REPO rev-parse --abbrev-ref HEAD)
   jq -n --arg title "$PR_TITLE" --arg head "$BRANCH" \
         --arg base "$FIESTA_BASE_BRANCH" --rawfile body /tmp/pr-body.md \
      '{title: $title, head: $head, base: $base, body: $body, draft: true}' \
@@ -36,7 +41,7 @@ Everything you need is already configured; do not go looking for an SSH key, a `
       -H "Authorization: Bearer $GITHUB_TOKEN" \
       -H "Accept: application/vnd.github+json" \
       --data @- \
-      "https://api.github.com/repos/$GITHUB_OWNER/$FIESTA_REPO/pulls" \
+      "https://api.github.com/repos/$GITHUB_OWNER/$REPO/pulls" \
   | jq -r '.html_url // .message'
   ```
 
@@ -46,7 +51,9 @@ Everything you need is already configured; do not go looking for an SSH key, a `
 
 - **Never print `$GITHUB_TOKEN`** or pass it as a command-line argument; it is in the environment for exactly these two uses.
 
-- If the push or the PR call fails and you cannot fix it, end with `@@FIESTA:FAIL <what failed, verbatim error>` rather than claiming a PR that does not exist. The URL you put in `@@FIESTA:DONE` must be the `html_url` the API returned.
+- A change spanning several repositories lands as several PRs, and the ticket is not done until all of them merge. Say so in each PR body: name the sibling PRs so a reviewer knows not to merge one alone.
+
+- If a push or a PR call fails and you cannot fix it, end with `@@FIESTA:FAIL <what failed, verbatim error>` rather than claiming a PR that does not exist. Every URL in `@@FIESTA:DONE` must be an `html_url` the API actually returned.
 
 ## The autonomy rule
 

@@ -4,9 +4,16 @@ import { Escalator } from './escalator.js';
 import { GitHubClient } from './github.js';
 import { HerdrClient } from './herdr.js';
 import { Loop } from './loop.js';
+import { readProjects, resolveProject } from './projects.js';
 import { TelegramClient } from './telegram.js';
 import { TrelloClient } from './trello.js';
-import { ensureMirror, prepareWorkspace, removeWorkspace, writeAgentEnvFile } from './workspace.js';
+import {
+  ensureMirror,
+  prepareWorkspace,
+  removeWorkspace,
+  workspaceRoot,
+  writeAgentEnvFile,
+} from './workspace.js';
 
 const config = loadConfig(process.env);
 
@@ -19,10 +26,12 @@ const loop = new Loop({
   trello,
   herdr,
   github,
+  projects: { readProjects, resolveProject },
   dispatcher: new Dispatcher({
     trello,
     herdr,
-    git: { ensureMirror, prepareWorkspace, writeAgentEnvFile },
+    git: { ensureMirror, prepareWorkspace, writeAgentEnvFile, workspaceRoot },
+    projects: { readProjects, resolveProject },
     config,
   }),
   escalator: new Escalator({ herdr, telegram, trello, config }),

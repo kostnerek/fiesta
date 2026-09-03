@@ -45,10 +45,15 @@ function build(
     deliverReplies: vi.fn(),
   };
   const telegram = { send: vi.fn() };
+  const projects = {
+    readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
+    resolveProject: vi.fn().mockReturnValue(['demo']),
+  };
   const loop = new Loop({
     trello: trello as never,
     herdr: herdr as never,
     github: github as never,
+    projects: projects as never,
     dispatcher: dispatcher as never,
     escalator: escalator as never,
     telegram: telegram as never,
@@ -69,7 +74,7 @@ function build(
       paths: { root: '/root' },
     } as never,
   });
-  return { loop, trello, herdr, dispatcher, github, escalator, telegram };
+  return { loop, trello, herdr, dispatcher, github, escalator, telegram, projects };
 }
 
 describe('Loop.recover', () => {
@@ -329,5 +334,62 @@ describe('Loop retry bounds', () => {
     }
 
     expect(telegram.send).toHaveBeenCalled();
+  });
+});
+
+describe('Loop.closeMerged across several repositories', () => {
+  it('waits until every pull request the agent opened is merged', async () => {
+    const { loop, trello, github, projects } = build({ review: [makeCard()] });
+    projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
+    github.findPrByBranch.mockImplementation(async (repo: string) =>
+      repo === 'platform'
+        ? { number: 7, url: 'https://pr/7', merged: true }
+        : { number: 8, url: 'https://pr/8', merged: false },
+    );
+
+    await loop.tick();
+
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-done');
+  });
+
+  it('closes the card once all of them are merged, naming each', async () => {
+    const { loop, trello, github, projects, herdr } = build({ review: [makeCard()] });
+    projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+    github.findPrByBranch.mockImplementation(async (repo: string) => ({
+      number: repo === 'platform' ? 7 : 8,
+      url: `https://pr/${repo}`,
+      merged: true,
+    }));
+
+    await loop.tick();
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-done');
+    expect(trello.addComment).toHaveBeenCalledWith(
+      'card-1',
+      expect.stringContaining('https://pr/platform, https://pr/backoffice'),
+    );
+  });
+
+  it('ignores repositories the agent never opened a pull request in', async () => {
+    const { loop, trello, github, projects, herdr } = build({ review: [makeCard()] });
+    projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+    github.findPrByBranch.mockImplementation(async (repo: string) =>
+      repo === 'platform' ? { number: 7, url: 'https://pr/7', merged: true } : null,
+    );
+
+    await loop.tick();
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-done');
+  });
+
+  it('leaves a card alone when the agent opened no pull request at all', async () => {
+    const { loop, trello, projects } = build({ review: [makeCard()] });
+    projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
+
+    await loop.tick();
+
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-done');
   });
 });

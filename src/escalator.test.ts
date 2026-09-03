@@ -7,7 +7,7 @@ const ticket: Ticket = {
   shortLink: 'aBcD1234',
   title: 'Add HELLO file',
   description: '',
-  repo: 'demo',
+  project: 'demo',
   baseBranch: 'main',
   branch: 'fiesta/aBcD1234-add-hello-file',
 };

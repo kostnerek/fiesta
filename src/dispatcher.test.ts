@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Dispatcher } from './dispatcher.js';
-import type { TrelloCard } from './ticket.js';
+import { TicketError, type TrelloCard } from './ticket.js';
 
 function makeCard(overrides: Partial<TrelloCard> = {}): TrelloCard {
   return {
@@ -24,11 +24,17 @@ function build() {
     ensureMirror: vi.fn().mockResolvedValue('/root/repos/demo'),
     prepareWorkspace: vi.fn().mockResolvedValue('/root/work/aBcD1234'),
     writeAgentEnvFile: vi.fn().mockResolvedValue('/root/env/aBcD1234.env'),
+    workspaceRoot: vi.fn().mockReturnValue('/root/work/aBcD1234'),
+  };
+  const projects = {
+    readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
+    resolveProject: vi.fn().mockReturnValue(['demo']),
   };
   const dispatcher = new Dispatcher({
     trello: trello as never,
     herdr: herdr as never,
     git: git as never,
+    projects: projects as never,
     config: {
       trello: {
         lists: { backlog: 'list-backlog', inProgress: 'list-progress', blocked: 'list-blocked' },
@@ -37,7 +43,7 @@ function build() {
       paths: { root: '/root', claudeCredentials: '/creds' },
     } as never,
   });
-  return { dispatcher, trello, herdr, git };
+  return { dispatcher, trello, herdr, git, projects };
 }
 
 describe('Dispatcher.claimAndStart', () => {
@@ -80,6 +86,45 @@ describe('Dispatcher.claimAndStart', () => {
     expect(trello.moveCard).toHaveBeenLastCalledWith('card-1', 'list-backlog');
     expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-blocked');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/exactly one label/));
+    expect(git.ensureMirror).not.toHaveBeenCalled();
+  });
+});
+
+describe('Dispatcher across several repositories', () => {
+  it('mirrors and checks out every repository of the project', async () => {
+    const { dispatcher, git, projects } = build();
+    projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
+
+    await dispatcher.claimAndStart(makeCard());
+
+    expect(git.ensureMirror).toHaveBeenCalledTimes(2);
+    expect(git.prepareWorkspace).toHaveBeenCalledTimes(2);
+    expect(git.prepareWorkspace.mock.calls.map(([params]) => (params as { repo: string }).repo)).toEqual([
+      'platform',
+      'backoffice',
+    ]);
+  });
+
+  it('mounts the shared workspace root, not one repository', async () => {
+    const { dispatcher, herdr, git } = build();
+    git.workspaceRoot.mockReturnValue('/root/work/aBcD1234');
+
+    await dispatcher.claimAndStart(makeCard());
+
+    expect(herdr.createWorkspace).toHaveBeenCalledWith('aBcD1234', '/root/work/aBcD1234');
+    const command = herdr.startAgent.mock.calls[0]![0].command as string;
+    expect(command).toContain('-v /root/work/aBcD1234:/workspace');
+  });
+
+  it('sends a card naming an unknown project to Backlog without cloning anything', async () => {
+    const { dispatcher, trello, git, projects } = build();
+    projects.resolveProject.mockImplementation(() => {
+      throw new TicketError('No project named "typo".');
+    });
+
+    await dispatcher.claimAndStart(makeCard());
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-backlog');
     expect(git.ensureMirror).not.toHaveBeenCalled();
   });
 });

@@ -5,6 +5,16 @@ description: Use before opening a pull request — run the repo's own tests, lin
 
 This is the last check before anything ships. Nobody re-reads your work before it becomes a PR — if you claim green here and you're wrong, a broken change goes out unattended. Be skeptical of your own change.
 
+## 0. Verify every repository you changed
+
+`/workspace` holds one directory per repository in this project. Run steps 1 and 2 **in each
+repository you changed**, separately — they have their own test commands and their own results.
+A repository you did not touch needs no verification.
+
+A change spanning several repositories can only be checked one repository at a time here; if
+the acceptance criteria genuinely require them running together, say so plainly in your report
+rather than implying you proved something you could not.
+
 ## 1. Discover the repo's own commands
 
 Don't assume `npm test` or any other default. Look at `package.json` scripts, a `Makefile`, or the CI config (`.github/workflows/*`, etc.) in this repo and find the actual test, lint and typecheck commands it uses. If a command genuinely doesn't exist in this repo (e.g. no lint is configured), say so explicitly rather than skipping it silently.

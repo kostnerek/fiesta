@@ -14,7 +14,7 @@ export type Ticket = {
   shortLink: string;
   title: string;
   description: string;
-  repo: string;
+  project: string;
   baseBranch: string;
   branch: string;
 };
@@ -42,7 +42,7 @@ function slugify(title: string): string {
 export function toTicket(card: TrelloCard): Ticket {
   if (card.labels.length !== 1) {
     throw new TicketError(
-      `Card "${card.name}" needs exactly one label naming the repository, found ${card.labels.length}.`,
+      `Card "${card.name}" needs exactly one label naming the project, found ${card.labels.length}.`,
     );
   }
 
@@ -50,7 +50,7 @@ export function toTicket(card: TrelloCard): Ticket {
     throw new TicketError(`Card "${card.name}" has an unusable shortLink "${card.shortLink}".`);
   }
 
-  const repo = card.labels[0]!.name;
+  const project = card.labels[0]!.name;
   const baseBranch = BASE_BRANCH_LINE.exec(card.desc)?.[1] ?? 'main';
 
   return {
@@ -58,7 +58,7 @@ export function toTicket(card: TrelloCard): Ticket {
     shortLink: card.shortLink,
     title: card.name,
     description: card.desc,
-    repo,
+    project,
     baseBranch,
     branch: `fiesta/${card.shortLink}-${slugify(card.name)}`,
   };

@@ -85,10 +85,11 @@ decodes the base64-encoded prompt from `FIESTA_PROMPT_B64`, and launches
 real, writable directory owned by the `agent` user inside the image so that
 mount only overlays the one file.
 
-**How the agent pushes.** The per-ticket checkout has its `origin` repointed
+**How the agent pushes.** Every per-ticket checkout has its `origin` repointed
 at `https://github.com/<GITHUB_OWNER>/<repo>.git` (the local mirror it was
 cloned from is a host path the container cannot see). `GITHUB_TOKEN`,
-`GITHUB_OWNER`, `FIESTA_REPO` and `FIESTA_BASE_BRANCH` reach the container
+`GITHUB_OWNER`, `FIESTA_PROJECT`, `FIESTA_REPOS` and `FIESTA_BASE_BRANCH`
+reach the container
 through `docker run --env-file <root>/env/<shortLink>.env` — a `600` file
 written per ticket and deleted with the workspace — rather than
 `-e NAME=value`, which would put the token in `ps aux` and in herdr's pane
@@ -132,15 +133,41 @@ Dockerfile from an earlier iteration of this doc are one `git revert` away
 in this branch's history — but they'd need herdr's socket and CLI solved
 first, not just resurrected as-is.
 
-## Adding a repository
+## Projects
 
-There is no repository registration step. A card is assigned to a repository
-by giving it **exactly one label** whose name is the repository name (e.g.
-`tsoft`). The daemon reads that label via `src/ticket.ts` and clones/mirrors
-`github.com/<GITHUB_OWNER>/<label>`. A card with zero or more than one label
-is sent to `Backlog` with the error posted back to the card; fix the label
-and move it to `Ready` again. `Backlog` is the ignored column, so a rejected
-card stays put instead of being cycled back into `Ready` by the orphan rule.
+A card carries **exactly one label**, and that label names a **project** — not
+a repository. A project is one or more repositories, checked out together, so a
+single card can change several of them:
+
+```bash
+fiesta project add tsoft platform platform-frontend backoffice
+fiesta project list
+fiesta project remove tsoft backoffice     # or omit repos to drop the project
+```
+
+`add` does three things, and the second and third are why it exists rather than
+you editing a file: it records the mapping in `<FIESTA_ROOT>/projects.json`,
+**verifies every repository actually exists** on GitHub, and **creates the
+matching label on the board**. Both of those catch a typo now instead of at
+2 a.m. on the first ticket — a label that does not match the project name
+exactly produces a card the daemon rejects, with no obvious reason why.
+
+A project of one repository is not a special case; it is the same code path.
+
+`/workspace` inside the agent container holds one directory per repository of
+the project, each on the ticket's branch. The agent changes only what the
+ticket needs, opens one draft PR per repository it touched, and the card
+reaches `Done` once **all** of those PRs are merged — a partial merge leaves it
+in `Review`, because a coupled change is not done until it lands whole.
+
+What this does not solve: `verify-ticket` runs each repository's own tests
+separately. A change that can only be proven by running several services
+together needs the full stack, which is out of scope here.
+
+A card with zero or more than one label, or one naming an unknown project, is
+sent to `Backlog` with the reason posted to the card; fix it and move it back
+to `Ready`. `Backlog` is the ignored column, so a rejected card stays put
+instead of being cycled back by the orphan rule.
 
 Optionally add a line `base: <branch>` to the card description to target a
 base branch other than `main`.

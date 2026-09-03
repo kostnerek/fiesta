@@ -115,7 +115,7 @@ wystartują tego samego ticketu — drugi zastanie pustą kolumnę.
 |---|---|---|
 | Zadanie | tytuł + opis | — |
 | Kryteria akceptacji | opis karty | Czytane przez `verify-ticket` przypadek po przypadku. |
-| **Repo** | **label** | Wybór z listy zamiast wpisywania — brak literówek, widoczne na froncie karty, jedno pole w API. Free-text pozwoliłby wysłać agenta do nieistniejącego repo. |
+| **Projekt** | **label** | Wybór z listy zamiast wpisywania — brak literówek, widoczne na froncie karty, jedno pole w API. Label nazywa **projekt**, a projekt to jedno lub wiele repo (patrz niżej), więc jedna karta może zmieniać kilka repozytoriów naraz. |
 | Base branch | `base: <branch>` w opisie; domyślnie `main` | Potrzebne rzadko; osobne pole kosztowałoby więcej uwagi, niż jest warte. |
 | Workspace, PR, założenia | komentarze bota | Ślad audytowy tam, gdzie użytkownik i tak patrzy. |
 
@@ -158,6 +158,33 @@ przeniesienie karty z powrotem do `Ready`.
   repos/<repo>/     lustro, tylko fetch, agent nigdy tego nie dotyka
   work/<shortLink>/ katalog roboczy jednego ticketu
 ```
+
+### Projekt to nazwany zestaw repozytoriów
+
+Label na karcie nazywa projekt, nie repozytorium. Mapowanie żyje w `<root>/projects.json`:
+
+```json
+{ "tsoft": ["platform", "platform-frontend", "backoffice"], "fiesta": ["fiesta"] }
+```
+
+To konfiguracja, nie stan ticketów, więc nie łamie zasady „stan żyje na boardzie". Zarządza
+się nią komendami `fiesta project list|add|remove`; `add` weryfikuje, że każde repo istnieje
+na GitHubie, i zakłada label na boardzie o tej samej nazwie — literówka w którymkolwiek z tych
+dwóch miejsc inaczej wychodzi dopiero przy pierwszym tickecie.
+
+**Projekt jednorepowy jest szczególnym przypadkiem, nie osobną ścieżką kodu.** Ta sama logika
+obsługuje jedno i osiem repozytoriów.
+
+Workspace to `work/<shortLink>/<repo>` per repozytorium; kontener montuje katalog nadrzędny
+jako `/workspace`, więc agent widzi jeden katalog na repo. Nazwa gałęzi jest identyczna we
+wszystkich. Agent otwiera PR **tylko w repozytoriach, które zmienił**, a karta trafia do `Done`
+dopiero, gdy wszystkie otwarte PR-y są zmergowane — częściowy merge zostawia ją w `Review`,
+bo zmiana sprzężona nie jest gotowa, póki nie wejdzie w całości.
+
+**Czego to nie rozwiązuje:** `verify-ticket` uruchomi testy każdego repozytorium osobno.
+Zmiany naprawdę sprzężone (proto w `shared-backend` plus konsument) wymagają postawionego
+stacku, czyli projektu A. Multi-repo daje agentowi możliwość zrobienia spójnej zmiany, nie
+dowód, że działa.
 
 ### Repozytoria bez rejestracji
 
