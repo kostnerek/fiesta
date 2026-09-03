@@ -144,3 +144,18 @@ image.
 ```bash
 pnpm test
 ```
+
+## Smoke test
+
+The unit tests prove no module regressed in isolation; they don't prove the
+loop works end to end against a real Trello board, a real herdr server, a
+real agent container and real Telegram/GitHub round trips. That requires a
+disposable board and a disposable repo, on a host that meets every
+prerequisite above (in particular one where `~/.claude/.credentials.json`
+exists as a file — not macOS, where Claude Code keeps credentials in the
+Keychain).
+
+See [`docs/SMOKE_TEST.md`](docs/SMOKE_TEST.md) for the full runbook: two
+scenarios (a plain happy path, and a deliberately irreversible-ambiguous
+card that exercises the Telegram ask/reply round trip), with an expected,
+checkable observation and a most-likely-cause for every step.
