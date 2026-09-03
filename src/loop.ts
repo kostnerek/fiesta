@@ -5,10 +5,18 @@ import type { GitHubClient } from './github.js';
 import type { Marker } from './markers.js';
 import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
+import type { TelegramClient } from './telegram.js';
 import type { TrelloClient } from './trello.js';
 import type { removeWorkspace } from './workspace.js';
 
 const ORPHANED_COMMENT = '🤖 Agent lost (restart or crash) — returning to Ready for a fresh run.';
+
+export const MAX_DISPATCH_FAILURES = 3;
+export const MAX_TICK_FAILURES = 5;
+
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function readTicket(card: TrelloCard): Ticket | null {
   try {
@@ -27,6 +35,8 @@ type ReclaimResult = { inProgress: ActiveWorkspaceCard[]; blocked: ActiveWorkspa
 export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
   private readonly lastMarker = new Map<string, Marker>();
+  private readonly dispatchFailures = new Map<string, number>();
+  private tickFailures = 0;
 
   constructor(
     private readonly deps: {
@@ -35,6 +45,7 @@ export class Loop {
       github: GitHubClient;
       dispatcher: Dispatcher;
       escalator: Escalator;
+      telegram: TelegramClient;
       removeWorkspace: typeof removeWorkspace;
       config: Config;
     },
@@ -44,8 +55,23 @@ export class Loop {
     await this.reclaimOrphans();
   }
 
+  async runTick(): Promise<void> {
+    try {
+      await this.tick();
+      this.tickFailures = 0;
+    } catch (error) {
+      this.tickFailures += 1;
+      console.error(`[fiesta] tick failed (${this.tickFailures} in a row)`, error);
+      if (this.tickFailures % MAX_TICK_FAILURES === 0) {
+        await this.notify(
+          `🤖 Fiesta has failed ${this.tickFailures} ticks in a row and is not making progress.\n\n${reason(error)}`,
+        );
+      }
+    }
+  }
+
   async tick(): Promise<void> {
-    const { trello, herdr, dispatcher, escalator, config } = this.deps;
+    const { trello, herdr, escalator, config } = this.deps;
 
     const { inProgress, blocked } = await this.reclaimOrphans();
 
@@ -104,8 +130,51 @@ export class Loop {
       const ready = await trello.cardsInList(config.trello.lists.ready);
       const next = ready[0];
       if (next) {
-        await dispatcher.claimAndStart(next);
+        await this.dispatch(next);
       }
+    }
+  }
+
+  private async dispatch(card: TrelloCard): Promise<void> {
+    const { dispatcher, trello, config } = this.deps;
+
+    let failure: unknown;
+    try {
+      await dispatcher.claimAndStart(card);
+      this.dispatchFailures.delete(card.shortLink);
+      return;
+    } catch (error) {
+      failure = error;
+    }
+
+    const failures = (this.dispatchFailures.get(card.shortLink) ?? 0) + 1;
+    this.dispatchFailures.set(card.shortLink, failures);
+    console.error(
+      `[fiesta] dispatch failed for card ${card.shortLink} (${failures}/${MAX_DISPATCH_FAILURES})`,
+      failure,
+    );
+    if (failures < MAX_DISPATCH_FAILURES) {
+      return;
+    }
+
+    await trello.moveCard(card.id, config.trello.lists.backlog);
+    await trello.addComment(
+      card.id,
+      `🤖 Could not start this card ${failures} times in a row, so it is parked in Backlog. ` +
+        `Last error: ${reason(failure)}. Fix the cause and move it back to Ready.`,
+    );
+    this.dispatchFailures.delete(card.shortLink);
+    await this.notify(
+      `🤖 [${card.shortLink}] ${card.name}\n\n🛑 Could not be started ${failures} times in a row; parked in Backlog.\n\n${reason(failure)}`,
+    );
+  }
+
+  private async notify(text: string): Promise<void> {
+    const { telegram, config } = this.deps;
+    try {
+      await telegram.send(config.telegram.chatId, text);
+    } catch (error) {
+      console.error('[fiesta] failed to send a Telegram alert', error);
     }
   }
 

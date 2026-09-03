@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Loop } from './loop.js';
+import { Loop, MAX_DISPATCH_FAILURES, MAX_TICK_FAILURES } from './loop.js';
 import type { TrelloCard } from './ticket.js';
 
 function makeCard(overrides: Partial<TrelloCard> = {}): TrelloCard {
@@ -44,16 +44,20 @@ function build(
     inspect: vi.fn().mockResolvedValue({ outcome: 'running', marker: null }),
     deliverReplies: vi.fn(),
   };
+  const telegram = { send: vi.fn() };
   const loop = new Loop({
     trello: trello as never,
     herdr: herdr as never,
     github: github as never,
     dispatcher: dispatcher as never,
     escalator: escalator as never,
+    telegram: telegram as never,
     removeWorkspace: vi.fn(),
     config: {
+      telegram: { chatId: '42' },
       trello: {
         lists: {
+          backlog: 'list-backlog',
           ready: 'list-ready',
           inProgress: 'list-progress',
           blocked: 'list-blocked',
@@ -65,7 +69,7 @@ function build(
       paths: { root: '/root' },
     } as never,
   });
-  return { loop, trello, herdr, dispatcher, github, escalator };
+  return { loop, trello, herdr, dispatcher, github, escalator, telegram };
 }
 
 describe('Loop.recover', () => {
@@ -241,5 +245,89 @@ describe('Loop.tick', () => {
     expect(trello.addComment).toHaveBeenCalledWith('card-2', expect.stringMatching(/restart/i));
     expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', expect.anything());
     expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-3' }));
+  });
+});
+
+describe('Loop retry bounds', () => {
+  it('parks a card in Backlog and pings Telegram after N consecutive dispatch failures', async () => {
+    const { loop, trello, dispatcher, telegram } = build({ ready: [makeCard()] });
+    dispatcher.claimAndStart.mockRejectedValue(new Error('clone exploded'));
+
+    for (let attempt = 0; attempt < MAX_DISPATCH_FAILURES; attempt += 1) {
+      await loop.tick();
+    }
+
+    expect(dispatcher.claimAndStart).toHaveBeenCalledTimes(MAX_DISPATCH_FAILURES);
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-backlog');
+    expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/clone exploded/));
+    expect(telegram.send).toHaveBeenCalledWith('42', expect.stringContaining('aBcD1234'));
+  });
+
+  it('keeps retrying until the bound is reached, not before', async () => {
+    const { loop, trello, telegram, dispatcher } = build({ ready: [makeCard()] });
+    dispatcher.claimAndStart.mockRejectedValue(new Error('clone exploded'));
+
+    for (let attempt = 0; attempt < MAX_DISPATCH_FAILURES - 1; attempt += 1) {
+      await loop.tick();
+    }
+
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-backlog');
+    expect(telegram.send).not.toHaveBeenCalled();
+  });
+
+  it('forgets earlier failures once a card starts', async () => {
+    const { loop, trello, dispatcher } = build({ ready: [makeCard()] });
+    dispatcher.claimAndStart
+      .mockRejectedValueOnce(new Error('flaky'))
+      .mockRejectedValueOnce(new Error('flaky'))
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new Error('flaky'));
+
+    for (let attempt = 0; attempt < MAX_DISPATCH_FAILURES + 1; attempt += 1) {
+      await loop.tick();
+    }
+
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-backlog');
+  });
+
+  it('pings Telegram after N consecutive whole-tick failures', async () => {
+    const { loop, trello, telegram } = build();
+    trello.cardsInList.mockRejectedValue(new Error('Trello 500'));
+
+    for (let attempt = 0; attempt < MAX_TICK_FAILURES - 1; attempt += 1) {
+      await loop.runTick();
+    }
+    expect(telegram.send).not.toHaveBeenCalled();
+
+    await loop.runTick();
+
+    expect(telegram.send).toHaveBeenCalledWith('42', expect.stringMatching(/Trello 500/));
+  });
+
+  it('resets the tick failure count after a tick that works', async () => {
+    const { loop, trello, telegram } = build();
+    trello.cardsInList.mockRejectedValue(new Error('Trello 500'));
+
+    for (let attempt = 0; attempt < MAX_TICK_FAILURES - 1; attempt += 1) {
+      await loop.runTick();
+    }
+    trello.cardsInList.mockResolvedValue([]);
+    await loop.runTick();
+    trello.cardsInList.mockRejectedValue(new Error('Trello 500'));
+    await loop.runTick();
+
+    expect(telegram.send).not.toHaveBeenCalled();
+  });
+
+  it('keeps ticking when the Telegram alert itself fails', async () => {
+    const { loop, trello, telegram } = build();
+    trello.cardsInList.mockRejectedValue(new Error('Trello 500'));
+    telegram.send.mockRejectedValue(new Error('telegram down'));
+
+    for (let attempt = 0; attempt < MAX_TICK_FAILURES; attempt += 1) {
+      await expect(loop.runTick()).resolves.toBeUndefined();
+    }
+
+    expect(telegram.send).toHaveBeenCalled();
   });
 });

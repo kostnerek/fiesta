@@ -26,6 +26,7 @@ const loop = new Loop({
     config,
   }),
   escalator: new Escalator({ herdr, telegram, trello, config }),
+  telegram,
   removeWorkspace,
   config,
 });
@@ -37,10 +38,6 @@ try {
 }
 
 for (;;) {
-  try {
-    await loop.tick();
-  } catch (error) {
-    console.error('[fiesta] tick failed', error);
-  }
+  await loop.runTick();
   await new Promise((resolve) => setTimeout(resolve, config.limits.pollIntervalMs));
 }
