@@ -7,35 +7,26 @@ agent needs a human decision.
 
 ## Prerequisites
 
+All of the following live on the **same host**, side by side — see "Run the
+daemon" below for why.
+
 - **Node 22** and **pnpm** (`pnpm@10.29.2`, pinned in `package.json`).
-- **Docker** (daemon + CLI) — the daemon shells out to `docker run` to launch
-  one container per agent, and uses the docker socket to do so.
+- **Docker** (daemon + CLI) on the host `PATH`. The daemon itself never
+  touches Docker directly — it builds a `docker run ...` command string
+  (`buildAgentCommand` in `src/prompt.ts`) and hands it to `herdr`, which
+  executes it inside a pane on the host. So `docker` needs to be reachable
+  wherever `herdr`'s panes run, i.e. the host.
 - **git** — the daemon clones/mirrors repositories and prepares working
   branches on the host filesystem before handing them to an agent container.
-- **A running `herdr` server, reachable from wherever the daemon runs.**
-  This is the single most common way to break Fiesta: every `herdr` command
-  (workspace create, pane run, pane read, pane send-text, ...) fails with
-  `server_not_running` unless a `herdr` server is already up. Start/attach a
-  herdr server **before** running `pnpm setup` or starting the daemon, and
-  keep it running for the daemon's entire lifetime.
-  - The daemon (`src/herdr.ts`) shells out to a `herdr` binary in `PATH`, so
-    besides the server being up, the `herdr` **CLI** itself has to be
-    reachable from the process that runs `pnpm start`. If you run the daemon
-    directly on the host (`pnpm start`), this is whatever `herdr` install you
-    already have in your shell's `PATH`.
-  - If you run the daemon via `docker-compose.yml` instead, be aware the
-    image built from the root `Dockerfile` does **not** bundle a `herdr`
-    binary (the design doc leaves "how to durably install herdr on Unraid —
-    container vs. user-script" as an open question for a later phase — see
-    `docs/superpowers/specs/2026-09-02-fiesta-agent-farm-design.md` §12).
-    `docker-compose.yml` uses `network_mode: host` so the container can reach
-    a herdr server listening on the host's network/socket, but you still need
-    to make the `herdr` CLI executable available *inside* the container
-    (e.g. bind-mount the binary into the image, or bake it into a custom
-    `Dockerfile` once its distribution story is settled) before `docker
-    compose up -d` will work end to end. Until then, running `pnpm start`
-    directly on the host — where `herdr` is already installed — is the
-    reliable path.
+- **A running `herdr` server, and the `herdr` CLI, on the same host as the
+  daemon.** This is the single most common way to break Fiesta: every
+  `herdr` command (workspace create, pane run, pane read, pane send-text,
+  ...) fails with `server_not_running` unless a `herdr` server is already
+  up. Start/attach a herdr server **before** running `pnpm setup` or
+  starting the daemon, and keep it running for the daemon's entire
+  lifetime. The daemon (`src/herdr.ts`) shells out to a `herdr` binary in
+  `PATH`, so it needs to be on the same `PATH` as the process running
+  `pnpm start`.
 
 ## Setup
 
@@ -79,26 +70,36 @@ mount only overlays the one file.
 ## Run the daemon
 
 ```bash
-docker compose up -d
-```
-
-`docker-compose.yml` builds the daemon from the root `Dockerfile`, loads
-`.env`, mounts the data root (`/mnt/user/appdata/fiesta`), the docker socket
-(so the daemon can launch agent containers), and your Claude credentials
-file, and runs with `network_mode: host` (so it can reach Trello/Telegram/
-GitHub and a host-local `herdr` server without extra port mapping). Mounting
-the docker socket into the *daemon* container is an intentional, contained
-trust boundary — the daemon needs it to start agent containers; the agent
-containers themselves never see the socket.
-
-Alternatively, run the daemon directly on the host:
-
-```bash
 pnpm start
 ```
 
-This is currently the more reliable option until the `herdr`-in-container
-story above is resolved (see Prerequisites).
+Fiesta runs directly on the host, next to `herdr` — there is no
+`docker-compose.yml` or daemon container image. This is deliberate, not an
+omission: the daemon never calls Docker itself. It builds a `docker run`
+command string and hands it to `herdr.startAgent`, which runs it as
+`herdr pane run <paneId> <command>` inside a pane that belongs to the
+**host-level** herdr server. Since the daemon's only path to launching an
+agent container runs through herdr's own panes, the daemon has to live
+wherever those panes live — the host. A containerised daemon would need its
+own `herdr` binary, a mount of herdr's socket (not achievable with
+`network_mode: host`, which only shares the network namespace, not unix
+sockets), and a docker-socket mount that nothing in the code path actually
+reads — three problems in service of an isolation boundary the design
+doesn't need. The isolation boundary that matters is the **agent**
+container (`docker/agent.Dockerfile`), which every ticket runs inside,
+unchanged by any of this.
+
+**Surviving a reboot.** Unraid keeps its OS in RAM, so neither `herdr` nor
+`pnpm start` will still be running after a restart unless something
+restarts them. Wiring that up — a user script, a system service, or
+whatever mechanism you already use for other long-running processes on the
+box — is on the operator; this repo doesn't prescribe one. Whatever you
+pick, make sure it starts `herdr` before it starts the Fiesta daemon.
+
+If a containerised daemon is wanted later, the compose file and root
+Dockerfile from an earlier iteration of this doc are one `git revert` away
+in this branch's history — but they'd need herdr's socket and CLI solved
+first, not just resurrected as-is.
 
 ## Adding a repository
 
