@@ -47,7 +47,6 @@ describe('buildAgentCommand', () => {
       workspacePath: '/root/work/aBcD1234',
       claudeCredentials: '/creds',
       envFilePath: '/root/env/aBcD1234.env',
-      prompt: buildPrompt(makeTicket(), 'kostnerek', [src('demo')]),
       ...overrides,
     });
   }
@@ -73,14 +72,11 @@ describe('buildAgentCommand', () => {
     expect(command).not.toContain('gh-token');
   });
 
-  it('carries the prompt as base64 in FIESTA_PROMPT_B64 and it decodes back to buildPrompt output', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('demo')]);
-    const command = build({ prompt });
+  it('stays short enough for a shell, carrying no prompt on the command line', () => {
+    const command = build();
 
-    const match = /FIESTA_PROMPT_B64=(\S+)/.exec(command);
-    expect(match).not.toBeNull();
-    const decoded = Buffer.from(match![1]!, 'base64').toString('utf8');
-    expect(decoded).toBe(prompt);
+    expect(command).not.toContain('FIESTA_PROMPT_B64');
+    expect(command.length).toBeLessThan(400);
   });
 });
 

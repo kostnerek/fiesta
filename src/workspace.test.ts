@@ -144,7 +144,7 @@ describe('ensureMirror', () => {
 
 describe('writeAgentEnvFile', () => {
   it('writes the agent secrets to an owner-only file outside the mounted workspace', async () => {
-    const path = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', sources: [SOURCE], ticket });
+    const path = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', sources: [SOURCE], prompt: 'do the thing', ticket });
 
     expect(path).toBe(agentEnvPath(root, ticket.shortLink));
     expect(path.startsWith(join(root, 'work'))).toBe(false);
@@ -161,7 +161,7 @@ describe('writeAgentEnvFile', () => {
 describe('removeWorkspace', () => {
   it('deletes the token-bearing env file along with the checkout', async () => {
     await prepareWorkspace({ root, mirrorPath, source: SOURCE, ticket });
-    const envPath = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', sources: [SOURCE], ticket });
+    const envPath = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', sources: [SOURCE], prompt: 'do the thing', ticket });
 
     await removeWorkspace({ root, shortLink: ticket.shortLink });
 
@@ -250,5 +250,28 @@ describe('ensureMirror from a clone already on the machine', () => {
 
     const { stdout } = await run('git', ['-C', mirror, 'branch', '--list', 'release']);
     expect(stdout.trim()).toMatch(/release/);
+  });
+});
+
+describe('writeAgentEnvFile prompt delivery', () => {
+  it('carries the prompt as base64 in the env file, not on any command line', async () => {
+    const prompt = 'Line one\nLine "two" with $dollars and `backticks`\n@@FIESTA:ASK example\n';
+    const path = await writeAgentEnvFile({
+      root,
+      owner: OWNER,
+      token: 'gh-secret',
+      sources: [SOURCE],
+      prompt,
+      ticket,
+    });
+
+    const line = (await readFile(path, 'utf8'))
+      .split('\n')
+      .find((entry) => entry.startsWith('FIESTA_PROMPT_B64='));
+
+    expect(line).toBeDefined();
+    const encoded = line!.slice('FIESTA_PROMPT_B64='.length);
+    expect(encoded).not.toMatch(/\s/);
+    expect(Buffer.from(encoded, 'base64').toString('utf8')).toBe(prompt);
   });
 });

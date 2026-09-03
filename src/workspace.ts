@@ -157,6 +157,7 @@ export async function writeAgentEnvFile(params: {
   owner: string;
   token: string;
   sources: RepoSource[];
+  prompt: string;
   ticket: Ticket;
 }): Promise<string> {
   const path = agentEnvPath(params.root, params.ticket.shortLink);
@@ -166,6 +167,7 @@ export async function writeAgentEnvFile(params: {
     `FIESTA_PROJECT=${params.ticket.project}`,
     `FIESTA_REPOS=${params.sources.map((source) => `${source.owner}/${source.repo}`).join(',')}`,
     `FIESTA_BASE_BRANCH=${params.ticket.baseBranch}`,
+    `FIESTA_PROMPT_B64=${Buffer.from(params.prompt, 'utf8').toString('base64')}`,
     '',
   ].join('\n');
 

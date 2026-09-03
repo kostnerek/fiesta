@@ -76,6 +76,7 @@ export class Dispatcher {
       owner: config.github.owner,
       token: config.github.token,
       sources,
+      prompt: buildPrompt(ticket, config.github.owner, sources),
       ticket,
     });
 
@@ -87,7 +88,6 @@ export class Dispatcher {
         workspacePath,
         claudeCredentials: config.paths.claudeCredentials,
         envFilePath,
-        prompt: buildPrompt(ticket, config.github.owner, sources),
       }),
     });
 

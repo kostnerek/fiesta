@@ -40,15 +40,12 @@ export function buildAgentCommand(params: {
   workspacePath: string;
   claudeCredentials: string;
   envFilePath: string;
-  prompt: string;
 }): string {
-  const encodedPrompt = Buffer.from(params.prompt, 'utf8').toString('base64');
   return [
     'docker run --rm -i',
     `-v ${params.workspacePath}:/workspace`,
     `-v ${params.claudeCredentials}/.credentials.json:/home/agent/.claude/.credentials.json:ro`,
     `--env-file ${params.envFilePath}`,
-    `-e FIESTA_PROMPT_B64=${encodedPrompt}`,
     'fiesta-agent:latest',
   ].join(' ');
 }

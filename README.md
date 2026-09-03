@@ -91,12 +91,14 @@ mount only overlays the one file.
 **How the agent pushes.** Every per-ticket checkout has its `origin` repointed
 at `https://github.com/<GITHUB_OWNER>/<repo>.git` (the local mirror it was
 cloned from is a host path the container cannot see). `GITHUB_TOKEN`,
-`GITHUB_OWNER`, `FIESTA_PROJECT`, `FIESTA_REPOS` and `FIESTA_BASE_BRANCH`
-reach the container
+`GITHUB_OWNER`, `FIESTA_PROJECT`, `FIESTA_REPOS`, `FIESTA_BASE_BRANCH` and the
+base64-encoded prompt (`FIESTA_PROMPT_B64`) all reach the container
 through `docker run --env-file <root>/env/<shortLink>.env` — a `600` file
 written per ticket and deleted with the workspace — rather than
 `-e NAME=value`, which would put the token in `ps aux` and in herdr's pane
-scrollback for the container's lifetime. The entrypoint turns
+scrollback for the container's lifetime — and which, for a prompt the length
+of a ticket, produced a command line too long to survive being typed into a
+pane at all. The entrypoint turns
 `GITHUB_TOKEN` into a git credential helper, so `git push` needs no further
 setup. There is no `gh` CLI in the image: the agent opens the draft PR
 itself with a `curl`/`jq` REST call, as spelled out in
