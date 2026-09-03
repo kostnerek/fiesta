@@ -42,6 +42,8 @@ Everything you need is already configured; do not go looking for an SSH key, a `
 
   Write the PR body to a file first (`/tmp/pr-body.md`) and let `jq --rawfile` do the JSON escaping — never hand-build the JSON.
 
+  Nothing sets `$PR_TITLE` for you — before running the call above, set it yourself to a short, descriptive summary of the change (the ticket title is a good starting point), e.g. `PR_TITLE="Fix the thing the ticket asked for"`. An unset `$PR_TITLE` yields an empty title and GitHub rejects the request.
+
 - **Never print `$GITHUB_TOKEN`** or pass it as a command-line argument; it is in the environment for exactly these two uses.
 
 - If the push or the PR call fails and you cannot fix it, end with `@@FIESTA:FAIL <what failed, verbatim error>` rather than claiming a PR that does not exist. The URL you put in `@@FIESTA:DONE` must be the `html_url` the API returned.
