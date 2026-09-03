@@ -120,6 +120,14 @@ describe('HerdrClient', () => {
     await expect(new HerdrClient(run).paneStatus('w2:p1')).resolves.toBe('unknown');
   });
 
+  it('submits the text after typing it, or the agent never sees it', async () => {
+    const run = vi.fn().mockResolvedValue('');
+    await new HerdrClient(run).sendText('w1:p1', 'use provider X');
+
+    expect(run).toHaveBeenNthCalledWith(1, ['pane', 'send-text', 'w1:p1', 'use provider X']);
+    expect(run).toHaveBeenNthCalledWith(2, ['pane', 'send-keys', 'w1:p1', 'Enter']);
+  });
+
   it('sends text verbatim to a pane', async () => {
     const paneSendText = readFileSync(
       fileURLToPath(new URL('../test/fixtures/herdr/pane-send-text.json', import.meta.url)),

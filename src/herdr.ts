@@ -71,6 +71,7 @@ export class HerdrClient {
 
   async sendText(paneId: string, text: string): Promise<void> {
     await this.run(['pane', 'send-text', paneId, text]);
+    await this.run(['pane', 'send-keys', paneId, 'Enter']);
   }
 
   async killWorkspace(workspaceId: string): Promise<void> {
