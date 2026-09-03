@@ -14,8 +14,9 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 COPY skills /home/agent/.claude/skills
-RUN chown -R agent:agent /home/agent/.claude
+RUN chown -R agent:agent /home/agent && chmod -R a+rwX /home/agent
 
+ENV HOME=/home/agent
 USER agent
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

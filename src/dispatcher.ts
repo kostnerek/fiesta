@@ -88,6 +88,8 @@ export class Dispatcher {
         workspacePath,
         claudeCredentials: config.paths.claudeCredentials,
         envFilePath,
+        uid: process.getuid?.() ?? 0,
+        gid: process.getgid?.() ?? 0,
       }),
     });
 

@@ -47,6 +47,8 @@ describe('buildAgentCommand', () => {
       workspacePath: '/root/work/aBcD1234',
       claudeCredentials: '/creds',
       envFilePath: '/root/env/aBcD1234.env',
+      uid: 0,
+      gid: 0,
       ...overrides,
     });
   }
@@ -94,5 +96,31 @@ describe('buildPrompt across several repositories', () => {
 
     expect(prompt).toMatch(/Leaving one untouched is/);
     expect(prompt).toMatch(/one draft PR per changed repository/i);
+  });
+});
+
+describe('buildAgentCommand ownership', () => {
+  it('runs as the daemon user so bind-mounted files keep matching ownership', () => {
+    const command = buildAgentCommand({
+      workspacePath: '/root/work/aBcD1234',
+      claudeCredentials: '/creds',
+      envFilePath: '/root/env/aBcD1234.env',
+      uid: 0,
+      gid: 0,
+    });
+
+    expect(command).toContain('--user 0:0');
+  });
+
+  it('carries whatever uid it was given, not a hardcoded one', () => {
+    const command = buildAgentCommand({
+      workspacePath: '/w',
+      claudeCredentials: '/c',
+      envFilePath: '/e',
+      uid: 99,
+      gid: 100,
+    });
+
+    expect(command).toContain('--user 99:100');
   });
 });

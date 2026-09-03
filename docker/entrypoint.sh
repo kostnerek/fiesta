@@ -7,7 +7,7 @@ set -euo pipefail
 
 git config --global user.name "fiesta-agent"
 git config --global user.email "fiesta-agent@localhost"
-git config --global --add safe.directory /workspace
+git config --global --add safe.directory '*'
 
 git config --global credential.https://github.com.helper \
   '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
