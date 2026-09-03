@@ -14,4 +14,4 @@ git config --global credential.https://github.com.helper \
 
 echo "$FIESTA_PROMPT_B64" | base64 -d > /tmp/prompt.txt
 
-exec claude --print --dangerously-skip-permissions "$(cat /tmp/prompt.txt)"
+exec claude --dangerously-skip-permissions "$(cat /tmp/prompt.txt)"

@@ -36,3 +36,18 @@ describe('findLastMarker', () => {
     });
   });
 });
+
+describe('findLastMarker against a rendered TUI', () => {
+  it.each([
+    ['  @@FIESTA:DONE https://pr/7', 'https://pr/7'],
+    ['│ @@FIESTA:DONE https://pr/7', 'https://pr/7'],
+    ['> @@FIESTA:DONE https://pr/7', 'https://pr/7'],
+    ['\t@@FIESTA:DONE https://pr/7', 'https://pr/7'],
+  ])('reads a marker indented by the interface: %s', (line, text) => {
+    expect(findLastMarker(`working...\n${line}\n`)).toEqual({ kind: 'DONE', text });
+  });
+
+  it('still ignores a marker quoted mid-sentence', () => {
+    expect(findLastMarker('End your turn with "@@FIESTA:ASK <question>".\n')).toBeNull();
+  });
+});

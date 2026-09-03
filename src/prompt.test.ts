@@ -122,14 +122,13 @@ describe('buildAgentCommand ownership', () => {
 });
 
 describe('buildAgentCommand stdin', () => {
-  it('does not attach stdin, since the prompt travels in the env file', () => {
+  it('allocates a tty, so the session stays live and streams into the pane', () => {
     const command = buildAgentCommand({
       workspacePath: '/w',
       credentialsPath: '/c.json',
       envFilePath: '/e',
     });
 
-    expect(command).toContain('docker run --rm ');
-    expect(command).not.toContain('--rm -i');
+    expect(command).toContain('docker run --rm -it');
   });
 });

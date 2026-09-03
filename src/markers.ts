@@ -2,7 +2,7 @@ export type MarkerKind = 'ASK' | 'DONE' | 'FAIL';
 
 export type Marker = { kind: MarkerKind; text: string };
 
-const MARKER_LINE = /^@@FIESTA:(ASK|DONE|FAIL)[ \t]*(.*)$/;
+const MARKER_LINE = /^[\s\u2502>|]*@@FIESTA:(ASK|DONE|FAIL)[ \t]*(.*)$/;
 
 export function findLastMarker(paneOutput: string): Marker | null {
   const lines = paneOutput.replace(/\r\n/g, '\n').split('\n');
