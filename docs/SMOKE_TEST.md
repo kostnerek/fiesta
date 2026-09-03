@@ -334,11 +334,22 @@ in its herdr pane (`herdr --remote <host>`).
 **If it fails:** nothing happens and no comment appears → almost always a
 reply that Telegram didn't structurally thread (see above) — delete it and
 redo the reply using the actual Reply gesture. If the reply was sent from a
-different chat than `TELEGRAM_CHAT_ID` (prerequisite 8), it's invisible to
-`getUpdates` entirely. If the card had already left `Blocked` (e.g. it
-timed out and was reclaimed) before the reply arrived, `deliverReplies`
-finds no matching entry in `active` and drops it — check the card's
-current column and comment history for a timeout marker first.
+different chat than `TELEGRAM_CHAT_ID` (prerequisite 8), `deliverReplies`
+fetches it and drops it on purpose: only the configured chat may type into
+an agent. If the card had already left `Blocked` (e.g. it timed out and was
+reclaimed) before the reply arrived, `deliverReplies` finds no matching
+entry in `active` and drops it — check the card's current column and
+comment history for a timeout marker first. On the daemon's **first** poll
+after a restart the whole pending Telegram backlog is skipped rather than
+replayed; if your reply was sent while the daemon was down, the card gets a
+`🤖 A Telegram reply arrived while Fiesta was down…` comment and you simply
+send it again.
+
+**Answering in the pane instead.** Typing the answer straight into the
+agent's herdr pane (`herdr --remote <host>`) is an equally supported path:
+the daemon inspects `Blocked` cards too, so when the agent resumes and ends
+its turn with a new marker the card moves on from `Blocked` by itself. A
+card in `Blocked` is never timed out — it may wait for you for days.
 
 ### Step B5: Card completes like Scenario A
 
