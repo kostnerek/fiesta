@@ -59,7 +59,9 @@ async function requireSignedInClaude(directory: string): Promise<void> {
 async function main(): Promise<void> {
   await ensureTools();
   console.log('\n=== Trello ===');
-  console.log('Open https://trello.com/power-ups/admin and copy your API key.');
+  console.log('Fiesta reads and writes one Trello board. Open the page below, create a Power-Up');
+  console.log('if you have none, and copy its API key:');
+  console.log('  https://trello.com/power-ups/admin');
   const trelloKey = await password({ message: 'Trello API key:' });
   console.log(
     `\nNow open this URL and approve access:\n` +
@@ -86,7 +88,12 @@ async function main(): Promise<void> {
   console.log(`Columns ready: ${Object.values(COLUMN_TITLES).join(', ')}.`);
 
   console.log('\n=== Telegram ===');
-  const telegramToken = await password({ message: 'Telegram bot token (from @BotFather):' });
+  console.log('Fiesta messages you through a bot you own. To create one:');
+  console.log('  1. In Telegram, open a chat with @BotFather.');
+  console.log('  2. Send /newbot and follow the prompts (a display name, then a username ending in "bot").');
+  console.log('  3. BotFather replies with the token — copy it.');
+  console.log('Already have a bot? Send /token to @BotFather to see its token again.');
+  const telegramToken = await password({ message: 'Telegram bot token:' });
   const telegram = new TelegramClient(telegramToken);
   const bot = await telegram.getMe();
   console.log(`Bot @${bot.username} reachable.`);
@@ -95,7 +102,10 @@ async function main(): Promise<void> {
   console.log(`Detected chat id ${chatId}.`);
 
   console.log('\n=== GitHub ===');
-  const githubToken = await password({ message: 'GitHub token (scope: repo):' });
+  console.log('Agents push branches and open draft pull requests as you, so the token needs');
+  console.log('the "repo" scope. Create one here — the scope is preselected:');
+  console.log('  https://github.com/settings/tokens/new?scopes=repo&description=fiesta');
+  const githubToken = await password({ message: 'GitHub token:' });
   const owner = (await new GitHubClient({ token: githubToken, owner: '' }).user()).login;
   console.log(`Authenticated as ${owner}.`);
 
