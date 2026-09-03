@@ -38,16 +38,13 @@ export function buildPrompt(ticket: Ticket, owner: string, sources: RepoSource[]
 
 export function buildAgentCommand(params: {
   workspacePath: string;
-  claudeCredentials: string;
+  credentialsPath: string;
   envFilePath: string;
-  uid: number;
-  gid: number;
 }): string {
   return [
     'docker run --rm -i',
-    `--user ${params.uid}:${params.gid}`,
     `-v ${params.workspacePath}:/workspace`,
-    `-v ${params.claudeCredentials}/.credentials.json:/home/agent/.claude/.credentials.json:ro`,
+    `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json:ro`,
     `--env-file ${params.envFilePath}`,
     'fiesta-agent:latest',
   ].join(' ');

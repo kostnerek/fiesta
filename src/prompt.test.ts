@@ -45,10 +45,8 @@ describe('buildAgentCommand', () => {
   function build(overrides: Partial<Parameters<typeof buildAgentCommand>[0]> = {}) {
     return buildAgentCommand({
       workspacePath: '/root/work/aBcD1234',
-      claudeCredentials: '/creds',
+      credentialsPath: '/root/env/aBcD1234.credentials.json',
       envFilePath: '/root/env/aBcD1234.env',
-      uid: 0,
-      gid: 0,
       ...overrides,
     });
   }
@@ -56,7 +54,7 @@ describe('buildAgentCommand', () => {
   it('mounts only the credentials file, not the whole .claude directory', () => {
     const command = build();
 
-    expect(command).toContain('-v /creds/.credentials.json:/home/agent/.claude/.credentials.json:ro');
+    expect(command).toContain('.credentials.json:/home/agent/.claude/.credentials.json:ro');
     expect(command).not.toContain(':/home/agent/.claude:ro');
   });
 
@@ -100,27 +98,25 @@ describe('buildPrompt across several repositories', () => {
 });
 
 describe('buildAgentCommand ownership', () => {
-  it('runs as the daemon user so bind-mounted files keep matching ownership', () => {
+  it('does not force a user, because Claude Code refuses to run as root', () => {
     const command = buildAgentCommand({
       workspacePath: '/root/work/aBcD1234',
-      claudeCredentials: '/creds',
+      credentialsPath: '/root/env/aBcD1234.credentials.json',
       envFilePath: '/root/env/aBcD1234.env',
-      uid: 0,
-      gid: 0,
     });
 
-    expect(command).toContain('--user 0:0');
+    expect(command).not.toContain('--user');
   });
 
-  it('carries whatever uid it was given, not a hardcoded one', () => {
+  it('mounts the per-ticket credentials copy, not the operator home file', () => {
     const command = buildAgentCommand({
       workspacePath: '/w',
-      claudeCredentials: '/c',
+      credentialsPath: '/root/env/aBcD1234.credentials.json',
       envFilePath: '/e',
-      uid: 99,
-      gid: 100,
     });
 
-    expect(command).toContain('--user 99:100');
+    expect(command).toContain(
+      '-v /root/env/aBcD1234.credentials.json:/home/agent/.claude/.credentials.json:ro',
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, chmod, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, chown, copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoSource } from './repo-source.js';
@@ -148,8 +148,32 @@ export async function prepareWorkspace(params: {
   return checkoutPath;
 }
 
+export const AGENT_UID = 1001;
+export const AGENT_GID = 1001;
+
 export function agentEnvPath(root: string, shortLink: string): string {
   return join(root, 'env', `${shortLink}.env`);
+}
+
+export function agentCredentialsPath(root: string, shortLink: string): string {
+  return join(root, 'env', `${shortLink}.credentials.json`);
+}
+
+export async function writeAgentCredentials(params: {
+  root: string;
+  shortLink: string;
+  source: string;
+}): Promise<string> {
+  const target = agentCredentialsPath(params.root, params.shortLink);
+  await mkdir(join(params.root, 'env'), { recursive: true, mode: 0o700 });
+  await copyFile(params.source, target);
+  await chmod(target, 0o600);
+  try {
+    await chown(target, AGENT_UID, AGENT_GID);
+  } catch {
+    return target;
+  }
+  return target;
 }
 
 export async function writeAgentEnvFile(params: {
@@ -188,8 +212,12 @@ export async function removeWorkspace(params: { root: string; shortLink: string 
   await rm(target, { recursive: true, force: true });
 
   const envBase = resolve(params.root, 'env');
-  const envTarget = resolve(agentEnvPath(params.root, params.shortLink));
-  if (envTarget.startsWith(envBase + sep)) {
-    await rm(envTarget, { force: true });
+  for (const path of [
+    agentEnvPath(params.root, params.shortLink),
+    agentCredentialsPath(params.root, params.shortLink),
+  ]) {
+    if (resolve(path).startsWith(envBase + sep)) {
+      await rm(path, { force: true });
+    }
   }
 }

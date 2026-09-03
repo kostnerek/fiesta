@@ -16,6 +16,7 @@ import {
   prepareWorkspace,
   removeWorkspace,
   workspaceRoot,
+  writeAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 
@@ -56,7 +57,13 @@ const loop = new Loop({
   dispatcher: new Dispatcher({
     trello,
     herdr,
-    git: { ensureMirror, prepareWorkspace, writeAgentEnvFile, workspaceRoot },
+    git: {
+      ensureMirror,
+      prepareWorkspace,
+      writeAgentEnvFile,
+      writeAgentCredentials,
+      workspaceRoot,
+    },
     projects: { readProjects, resolveProject, resolveRepoSource },
     config,
   }),

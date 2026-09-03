@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { inspect, promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  agentCredentialsPath,
   agentEnvPath,
   ensureMirror,
   prepareWorkspace,
   removeWorkspace,
+  writeAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 import type { Ticket } from './ticket.js';
@@ -273,5 +275,29 @@ describe('writeAgentEnvFile prompt delivery', () => {
     const encoded = line!.slice('FIESTA_PROMPT_B64='.length);
     expect(encoded).not.toMatch(/\s/);
     expect(Buffer.from(encoded, 'base64').toString('utf8')).toBe(prompt);
+  });
+});
+
+describe('writeAgentCredentials', () => {
+  it('copies the credentials beside the env file, owner-only', async () => {
+    const source = join(root, 'source-credentials.json');
+    await writeFile(source, '{"token":"secret"}', { mode: 0o600 });
+
+    const path = await writeAgentCredentials({ root, shortLink: ticket.shortLink, source });
+
+    expect(path).toBe(agentCredentialsPath(root, ticket.shortLink));
+    expect(await readFile(path, 'utf8')).toBe('{"token":"secret"}');
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(path.startsWith(join(root, 'work'))).toBe(false);
+  });
+
+  it('is removed with the workspace, so a token copy never outlives its ticket', async () => {
+    const source = join(root, 'source-credentials-2.json');
+    await writeFile(source, '{}', { mode: 0o600 });
+    const path = await writeAgentCredentials({ root, shortLink: ticket.shortLink, source });
+
+    await removeWorkspace({ root, shortLink: ticket.shortLink });
+
+    await expect(stat(path)).rejects.toThrow();
   });
 });

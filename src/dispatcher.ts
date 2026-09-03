@@ -9,6 +9,7 @@ import type {
   ensureMirror,
   prepareWorkspace,
   workspaceRoot,
+  writeAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 
@@ -16,6 +17,7 @@ type GitOperations = {
   ensureMirror: typeof ensureMirror;
   prepareWorkspace: typeof prepareWorkspace;
   writeAgentEnvFile: typeof writeAgentEnvFile;
+  writeAgentCredentials: typeof writeAgentCredentials;
   workspaceRoot: typeof workspaceRoot;
 };
 
@@ -71,6 +73,11 @@ export class Dispatcher {
     }
 
     const workspacePath = git.workspaceRoot(config.paths.root, ticket.shortLink);
+    const credentialsPath = await git.writeAgentCredentials({
+      root: config.paths.root,
+      shortLink: ticket.shortLink,
+      source: `${config.paths.claudeCredentials}/.credentials.json`,
+    });
     const envFilePath = await git.writeAgentEnvFile({
       root: config.paths.root,
       owner: config.github.owner,
@@ -84,13 +91,7 @@ export class Dispatcher {
     await herdr.startAgent({
       workspaceId: workspace.id,
       name: ticket.shortLink,
-      command: buildAgentCommand({
-        workspacePath,
-        claudeCredentials: config.paths.claudeCredentials,
-        envFilePath,
-        uid: process.getuid?.() ?? 0,
-        gid: process.getgid?.() ?? 0,
-      }),
+      command: buildAgentCommand({ workspacePath, credentialsPath, envFilePath }),
     });
 
     await trello.addComment(
