@@ -37,29 +37,39 @@ function build(paneOutput: string, paneStatus = 'idle') {
 describe('Escalator.inspect', () => {
   it('moves the card to Blocked and asks on Telegram for ASK', async () => {
     const { escalator, telegram, trello } = build('@@FIESTA:ASK Which provider?\n');
-    const outcome = await escalator.inspect(ticket, 'pane-1', Date.now());
+    const { outcome, marker } = await escalator.inspect(ticket, 'pane-1', {
+      since: Date.now(),
+      lastMarker: null,
+    });
 
     expect(outcome).toBe('blocked');
+    expect(marker).toEqual({ kind: 'ASK', text: 'Which provider?' });
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-blocked');
     expect(telegram.send).toHaveBeenCalledWith('42', expect.stringContaining('aBcD1234'));
   });
 
   it('moves the card to Review for DONE', async () => {
     const { escalator, trello } = build('@@FIESTA:DONE https://pr/7\n');
-    expect(await escalator.inspect(ticket, 'pane-1', Date.now())).toBe('review');
+    expect(
+      (await escalator.inspect(ticket, 'pane-1', { since: Date.now(), lastMarker: null })).outcome,
+    ).toBe('review');
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-review');
   });
 
   it('keeps waiting while the agent is working and silent', async () => {
     const { escalator, telegram } = build('compiling...\n', 'working');
-    expect(await escalator.inspect(ticket, 'pane-1', Date.now())).toBe('running');
+    expect(
+      (await escalator.inspect(ticket, 'pane-1', { since: Date.now(), lastMarker: null })).outcome,
+    ).toBe('running');
     expect(telegram.send).not.toHaveBeenCalled();
   });
 
   it('keeps waiting past the timeout while the pane status is still working', async () => {
     const { escalator, telegram, trello } = build('compiling...\n', 'working');
     const longAgo = Date.now() - 5000;
-    expect(await escalator.inspect(ticket, 'pane-1', longAgo)).toBe('running');
+    expect(
+      (await escalator.inspect(ticket, 'pane-1', { since: longAgo, lastMarker: null })).outcome,
+    ).toBe('running');
     expect(trello.moveCard).not.toHaveBeenCalled();
     expect(trello.addComment).not.toHaveBeenCalled();
     expect(telegram.send).not.toHaveBeenCalled();
@@ -68,15 +78,72 @@ describe('Escalator.inspect', () => {
   it('fails a ticket that went quiet past the timeout', async () => {
     const { escalator, trello } = build('nothing new\n', 'idle');
     const longAgo = Date.now() - 5000;
-    expect(await escalator.inspect(ticket, 'pane-1', longAgo)).toBe('blocked');
+    expect(
+      (await escalator.inspect(ticket, 'pane-1', { since: longAgo, lastMarker: null })).outcome,
+    ).toBe('blocked');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/timed out/i));
+  });
+
+  it('moves the card to Blocked and informs Telegram for FAIL', async () => {
+    const { escalator, telegram, trello } = build('@@FIESTA:FAIL tests still red\n');
+
+    const { outcome, marker } = await escalator.inspect(ticket, 'pane-1', {
+      since: Date.now(),
+      lastMarker: null,
+    });
+
+    expect(outcome).toBe('blocked');
+    expect(marker).toEqual({ kind: 'FAIL', text: 'tests still red' });
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-blocked');
+    expect(trello.addComment).toHaveBeenCalledWith('card-1', '🤖 FAIL: tests still red');
+    const [, text] = telegram.send.mock.calls[0]!;
+    expect(text).toContain('tests still red');
+    expect(text).not.toMatch(/odpowiedz/i);
+  });
+
+  it('ignores a marker it has already handled instead of bouncing the card back', async () => {
+    const { escalator, telegram, trello } = build('@@FIESTA:ASK Which provider?\n');
+
+    const first = await escalator.inspect(ticket, 'pane-1', { since: Date.now(), lastMarker: null });
+    const second = await escalator.inspect(ticket, 'pane-1', {
+      since: null,
+      lastMarker: first.marker,
+    });
+
+    expect(first.outcome).toBe('blocked');
+    expect(second).toEqual({ outcome: 'running', marker: null });
+    expect(trello.moveCard).toHaveBeenCalledTimes(1);
+    expect(telegram.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('acts on a new marker that follows the one it already handled', async () => {
+    const { escalator, trello } = build('@@FIESTA:ASK Which provider?\n@@FIESTA:DONE https://pr/7\n');
+
+    const { outcome } = await escalator.inspect(ticket, 'pane-1', {
+      since: null,
+      lastMarker: { kind: 'ASK', text: 'Which provider?' },
+    });
+
+    expect(outcome).toBe('review');
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-review');
+  });
+
+  it('never times out a card that is waiting for a human', async () => {
+    const { escalator, herdr, telegram, trello } = build('nothing new\n', 'idle');
+
+    const result = await escalator.inspect(ticket, 'pane-1', { since: null, lastMarker: null });
+
+    expect(result).toEqual({ outcome: 'running', marker: null });
+    expect(herdr.paneStatus).not.toHaveBeenCalled();
+    expect(trello.moveCard).not.toHaveBeenCalled();
+    expect(telegram.send).not.toHaveBeenCalled();
   });
 
   it('records the question on the card even when Telegram is down', async () => {
     const { escalator, telegram, trello } = build('@@FIESTA:ASK Which provider?\n');
     telegram.send.mockRejectedValue(new Error('telegram unreachable'));
 
-    await expect(escalator.inspect(ticket, 'pane-1', Date.now())).rejects.toThrow(/unreachable/);
+    await expect(escalator.inspect(ticket, 'pane-1', { since: Date.now(), lastMarker: null })).rejects.toThrow(/unreachable/);
 
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-blocked');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringContaining('Which provider?'));

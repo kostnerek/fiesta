@@ -1,6 +1,6 @@
 import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
-import { findLastMarker } from './markers.js';
+import { findLastMarker, type Marker } from './markers.js';
 import type { Ticket } from './ticket.js';
 import { extractShortLink, formatEscalation, type TelegramClient } from './telegram.js';
 import type { TrelloClient } from './trello.js';
@@ -8,6 +8,14 @@ import type { TrelloClient } from './trello.js';
 export type Outcome = 'running' | 'blocked' | 'review';
 
 export type ActiveTicket = { ticket: Ticket; paneId: string };
+
+export type InspectOptions = { since: number | null; lastMarker: Marker | null };
+
+export type InspectResult = { outcome: Outcome; marker: Marker | null };
+
+function isSameMarker(marker: Marker, previous: Marker | null): boolean {
+  return previous !== null && previous.kind === marker.kind && previous.text === marker.text;
+}
 
 export class Escalator {
   private telegramOffset = 0;
@@ -21,11 +29,11 @@ export class Escalator {
     },
   ) {}
 
-  async inspect(ticket: Ticket, paneId: string, lastActivityAt: number): Promise<Outcome> {
+  async inspect(ticket: Ticket, paneId: string, options: InspectOptions): Promise<InspectResult> {
     const { herdr, telegram, trello, config } = this.deps;
     const marker = findLastMarker(await herdr.readPane(paneId));
 
-    if (marker) {
+    if (marker && !isSameMarker(marker, options.lastMarker)) {
       const list = marker.kind === 'DONE' ? config.trello.lists.review : config.trello.lists.blocked;
       await trello.moveCard(ticket.cardId, list);
       await trello.addComment(ticket.cardId, `🤖 ${marker.kind}: ${marker.text}`);
@@ -33,11 +41,15 @@ export class Escalator {
         config.telegram.chatId,
         formatEscalation({ shortLink: ticket.shortLink, title: ticket.title, marker }),
       );
-      return marker.kind === 'DONE' ? 'review' : 'blocked';
+      return { outcome: marker.kind === 'DONE' ? 'review' : 'blocked', marker };
+    }
+
+    if (options.since === null) {
+      return { outcome: 'running', marker: null };
     }
 
     const status = await herdr.paneStatus(paneId);
-    const silentFor = Date.now() - lastActivityAt;
+    const silentFor = Date.now() - options.since;
     if (status !== 'working' && silentFor > config.limits.ticketTimeoutMs) {
       await trello.moveCard(ticket.cardId, config.trello.lists.blocked);
       await trello.addComment(
@@ -52,10 +64,10 @@ export class Escalator {
           marker: { kind: 'FAIL', text: 'timed out with no marker' },
         }),
       );
-      return 'blocked';
+      return { outcome: 'blocked', marker: null };
     }
 
-    return 'running';
+    return { outcome: 'running', marker: null };
   }
 
   async deliverReplies(active: Map<string, ActiveTicket>): Promise<void> {

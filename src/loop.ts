@@ -2,6 +2,7 @@ import type { Config } from './config.js';
 import type { Dispatcher } from './dispatcher.js';
 import type { ActiveTicket, Escalator } from './escalator.js';
 import type { GitHubClient } from './github.js';
+import type { Marker } from './markers.js';
 import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TrelloClient } from './trello.js';
@@ -25,6 +26,7 @@ type ReclaimResult = { inProgress: ActiveWorkspaceCard[]; blocked: ActiveWorkspa
 
 export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
+  private readonly lastMarker = new Map<string, Marker>();
 
   constructor(
     private readonly deps: {
@@ -63,18 +65,38 @@ export class Loop {
 
     await escalator.deliverReplies(active);
 
-    for (const { card } of inProgress) {
+    const inspectable = [
+      ...inProgress.map(({ card }) => ({ card, waitingForHuman: false })),
+      ...blocked.map(({ card }) => ({ card, waitingForHuman: true })),
+    ];
+
+    for (const { card, waitingForHuman } of inspectable) {
       const entry = active.get(card.shortLink);
       if (!entry) {
         continue;
       }
-      const since = this.lastActivityAt.get(card.shortLink) ?? Date.now();
-      this.lastActivityAt.set(card.shortLink, since);
-      const outcome = await escalator.inspect(entry.ticket, entry.paneId, since);
-      if (outcome !== 'running') {
-        this.lastActivityAt.delete(card.shortLink);
+      let since: number | null = null;
+      if (!waitingForHuman) {
+        since = this.lastActivityAt.get(card.shortLink) ?? Date.now();
+        this.lastActivityAt.set(card.shortLink, since);
+      }
+      try {
+        const { outcome, marker } = await escalator.inspect(entry.ticket, entry.paneId, {
+          since,
+          lastMarker: this.lastMarker.get(card.shortLink) ?? null,
+        });
+        if (marker) {
+          this.lastMarker.set(card.shortLink, marker);
+        }
+        if (outcome !== 'running') {
+          this.lastActivityAt.delete(card.shortLink);
+        }
+      } catch (error) {
+        console.error(`[fiesta] tick: inspect failed for card ${card.shortLink}`, error);
       }
     }
+
+    this.forget(inspectable.map(({ card }) => card.shortLink));
 
     await this.closeMerged();
 
@@ -83,6 +105,17 @@ export class Loop {
       const next = ready[0];
       if (next) {
         await dispatcher.claimAndStart(next);
+      }
+    }
+  }
+
+  private forget(stillActive: string[]): void {
+    const keep = new Set(stillActive);
+    for (const map of [this.lastActivityAt, this.lastMarker]) {
+      for (const shortLink of [...map.keys()]) {
+        if (!keep.has(shortLink)) {
+          map.delete(shortLink);
+        }
       }
     }
   }

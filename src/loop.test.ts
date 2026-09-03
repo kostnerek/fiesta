@@ -40,12 +40,16 @@ function build(
   };
   const dispatcher = { claimAndStart: vi.fn() };
   const github = { findPrByBranch: vi.fn().mockResolvedValue(null) };
+  const escalator = {
+    inspect: vi.fn().mockResolvedValue({ outcome: 'running', marker: null }),
+    deliverReplies: vi.fn(),
+  };
   const loop = new Loop({
     trello: trello as never,
     herdr: herdr as never,
     github: github as never,
     dispatcher: dispatcher as never,
-    escalator: { inspect: vi.fn(), deliverReplies: vi.fn() } as never,
+    escalator: escalator as never,
     removeWorkspace: vi.fn(),
     config: {
       trello: {
@@ -61,7 +65,7 @@ function build(
       paths: { root: '/root' },
     } as never,
   });
-  return { loop, trello, herdr, dispatcher, github };
+  return { loop, trello, herdr, dispatcher, github, escalator };
 }
 
 describe('Loop.recover', () => {
@@ -147,6 +151,74 @@ describe('Loop.tick', () => {
 
     expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-ready');
     expect(dispatcher.claimAndStart).not.toHaveBeenCalled();
+  });
+
+  it('inspects a Blocked card too, so an answer typed into the pane is noticed', async () => {
+    const { loop, herdr, escalator } = build({ blocked: [makeCard()] });
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+
+    await loop.tick();
+
+    expect(escalator.inspect).toHaveBeenCalledWith(
+      expect.objectContaining({ cardId: 'card-1' }),
+      'pane-1',
+      expect.objectContaining({ since: null }),
+    );
+  });
+
+  it('runs the silence timeout for In Progress cards only', async () => {
+    const { loop, herdr, escalator } = build({ inProgress: [makeCard()] });
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+
+    await loop.tick();
+
+    const options = escalator.inspect.mock.calls[0]![2] as { since: number | null };
+    expect(typeof options.since).toBe('number');
+  });
+
+  it('remembers the marker it handled and passes it back on the next tick', async () => {
+    const { loop, herdr, escalator } = build({ blocked: [makeCard()] });
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+    const marker = { kind: 'ASK', text: 'Which provider?' };
+    escalator.inspect.mockResolvedValue({ outcome: 'blocked', marker });
+
+    await loop.tick();
+    await loop.tick();
+
+    expect(escalator.inspect).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      'pane-1',
+      expect.objectContaining({ lastMarker: null }),
+    );
+    expect(escalator.inspect).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      'pane-1',
+      expect.objectContaining({ lastMarker: marker }),
+    );
+  });
+
+  it('forgets a card once it leaves the active columns', async () => {
+    const cards = { inProgress: [makeCard()] as TrelloCard[] };
+    const { loop, herdr, escalator } = build(cards);
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+    escalator.inspect.mockResolvedValue({
+      outcome: 'blocked',
+      marker: { kind: 'ASK', text: 'Which provider?' },
+    });
+
+    await loop.tick();
+    cards.inProgress = [];
+    await loop.tick();
+    cards.inProgress = [makeCard()];
+    await loop.tick();
+
+    expect(escalator.inspect).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'pane-1',
+      expect.objectContaining({ lastMarker: null }),
+    );
   });
 
   it('isolates a card whose herdr lookup rejects so the rest of the board still gets processed', async () => {
