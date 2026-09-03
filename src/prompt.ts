@@ -42,7 +42,7 @@ export function buildAgentCommand(params: {
   envFilePath: string;
 }): string {
   return [
-    'docker run --rm -i',
+    'docker run --rm',
     `-v ${params.workspacePath}:/workspace`,
     `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json:ro`,
     `--env-file ${params.envFilePath}`,
