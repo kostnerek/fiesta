@@ -14,11 +14,19 @@ function makeCard(overrides: Partial<TrelloCard> = {}): TrelloCard {
   };
 }
 
-function build(overrides: { ready?: TrelloCard[]; inProgress?: TrelloCard[]; review?: TrelloCard[] } = {}) {
+function build(
+  overrides: {
+    ready?: TrelloCard[];
+    inProgress?: TrelloCard[];
+    blocked?: TrelloCard[];
+    review?: TrelloCard[];
+  } = {},
+) {
   const trello = {
     cardsInList: vi.fn(async (listId: string) => {
       if (listId === 'list-ready') return overrides.ready ?? [];
       if (listId === 'list-progress') return overrides.inProgress ?? [];
+      if (listId === 'list-blocked') return overrides.blocked ?? [];
       if (listId === 'list-review') return overrides.review ?? [];
       return [];
     }),
@@ -113,5 +121,53 @@ describe('Loop.tick', () => {
 
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-done');
     expect(herdr.killWorkspace).toHaveBeenCalledWith('ws-1');
+  });
+
+  it('reclaims a Blocked card with no live workspace, freeing capacity for a Ready card', async () => {
+    const { loop, trello, dispatcher } = build({
+      ready: [makeCard({ id: 'card-2' })],
+      blocked: [makeCard()],
+    });
+
+    await loop.tick();
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-ready');
+    expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/restart/i));
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-2' }));
+  });
+
+  it('does not let a Blocked card with a live workspace count twice or block a Ready card wrongly', async () => {
+    const { loop, trello, dispatcher, herdr } = build({
+      ready: [makeCard({ id: 'card-2' })],
+      blocked: [makeCard()],
+    });
+    herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+
+    await loop.tick();
+
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-ready');
+    expect(dispatcher.claimAndStart).not.toHaveBeenCalled();
+  });
+
+  it('isolates a card whose herdr lookup rejects so the rest of the board still gets processed', async () => {
+    const orphan = makeCard({ id: 'card-1', shortLink: 'aBcD1234' });
+    const healthy = makeCard({ id: 'card-2', shortLink: 'zZzZ9999' });
+    const { loop, trello, dispatcher, herdr } = build({
+      ready: [makeCard({ id: 'card-3' })],
+      inProgress: [orphan, healthy],
+    });
+    herdr.findWorkspaceByLabel.mockImplementation(async (shortLink: string) => {
+      if (shortLink === 'aBcD1234') {
+        throw new Error('herdr unreachable for this card');
+      }
+      return null;
+    });
+
+    await loop.tick();
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-2', 'list-ready');
+    expect(trello.addComment).toHaveBeenCalledWith('card-2', expect.stringMatching(/restart/i));
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', expect.anything());
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-3' }));
   });
 });

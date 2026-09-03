@@ -7,7 +7,7 @@ import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js
 import type { TrelloClient } from './trello.js';
 import type { removeWorkspace } from './workspace.js';
 
-const INTERRUPTED_COMMENT = '🤖 Interrupted by a restart — returning to Ready for a fresh run.';
+const ORPHANED_COMMENT = '🤖 Agent lost (restart or crash) — returning to Ready for a fresh run.';
 
 function readTicket(card: TrelloCard): Ticket | null {
   try {
@@ -20,7 +20,8 @@ function readTicket(card: TrelloCard): Ticket | null {
   }
 }
 
-type ActiveInProgress = { card: TrelloCard; workspace: HerdrWorkspace };
+type ActiveWorkspaceCard = { card: TrelloCard; workspace: HerdrWorkspace };
+type ReclaimResult = { inProgress: ActiveWorkspaceCard[]; blocked: ActiveWorkspaceCard[] };
 
 export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
@@ -44,26 +45,20 @@ export class Loop {
   async tick(): Promise<void> {
     const { trello, herdr, dispatcher, escalator, config } = this.deps;
 
-    const inProgress = await this.reclaimOrphans();
-    const blocked = await trello.cardsInList(config.trello.lists.blocked);
+    const { inProgress, blocked } = await this.reclaimOrphans();
 
     const active = new Map<string, ActiveTicket>();
 
-    for (const { card, workspace } of inProgress) {
+    for (const { card, workspace } of [...inProgress, ...blocked]) {
       const ticket = readTicket(card);
       if (!ticket) {
         continue;
       }
-      active.set(card.shortLink, { ticket, paneId: await herdr.firstPaneId(workspace.id) });
-    }
-
-    for (const card of blocked) {
-      const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
-      const ticket = workspace ? readTicket(card) : null;
-      if (!workspace || !ticket) {
-        continue;
+      try {
+        active.set(card.shortLink, { ticket, paneId: await herdr.firstPaneId(workspace.id) });
+      } catch (error) {
+        console.error(`[fiesta] tick: failed to resolve pane for card ${card.shortLink}`, error);
       }
-      active.set(card.shortLink, { ticket, paneId: await herdr.firstPaneId(workspace.id) });
     }
 
     await escalator.deliverReplies(active);
@@ -92,41 +87,55 @@ export class Loop {
     }
   }
 
-  private async reclaimOrphans(): Promise<ActiveInProgress[]> {
+  private async reclaimOrphans(): Promise<ReclaimResult> {
     const { trello, herdr, config } = this.deps;
-    const active: ActiveInProgress[] = [];
+    const targets = [
+      { origin: 'inProgress' as const, listId: config.trello.lists.inProgress },
+      { origin: 'blocked' as const, listId: config.trello.lists.blocked },
+    ];
+    const result: ReclaimResult = { inProgress: [], blocked: [] };
 
-    for (const card of await trello.cardsInList(config.trello.lists.inProgress)) {
-      const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
-      if (workspace) {
-        active.push({ card, workspace });
-        continue;
+    for (const { origin, listId } of targets) {
+      for (const card of await trello.cardsInList(listId)) {
+        try {
+          const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
+          if (workspace) {
+            result[origin].push({ card, workspace });
+            continue;
+          }
+          await trello.moveCard(card.id, config.trello.lists.ready);
+          await trello.addComment(card.id, ORPHANED_COMMENT);
+        } catch (error) {
+          console.error(`[fiesta] reclaimOrphans: failed to reconcile card ${card.shortLink}`, error);
+        }
       }
-      await trello.moveCard(card.id, config.trello.lists.ready);
-      await trello.addComment(card.id, INTERRUPTED_COMMENT);
     }
 
-    return active;
+    return result;
   }
 
   private async closeMerged(): Promise<void> {
     const { trello, herdr, github, config } = this.deps;
     for (const card of await trello.cardsInList(config.trello.lists.review)) {
-      const ticket = readTicket(card);
-      if (!ticket) {
-        continue;
+      try {
+        const ticket = readTicket(card);
+        if (!ticket) {
+          continue;
+        }
+        const pr = await github.findPrByBranch(ticket.repo, ticket.branch);
+        if (!pr?.merged) {
+          continue;
+        }
+        await trello.moveCard(card.id, config.trello.lists.done);
+        await trello.addComment(card.id, `🤖 Merged: ${pr.url}`);
+        const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
+        if (workspace) {
+          await herdr.killWorkspace(workspace.id);
+        }
+        await this.deps.removeWorkspace({ root: config.paths.root, shortLink: card.shortLink });
+      } catch (error) {
+        console.error(`[fiesta] closeMerged: failed to reconcile card ${card.shortLink}`, error);
       }
-      const pr = await github.findPrByBranch(ticket.repo, ticket.branch);
-      if (!pr?.merged) {
-        continue;
-      }
-      await trello.moveCard(card.id, config.trello.lists.done);
-      await trello.addComment(card.id, `🤖 Merged: ${pr.url}`);
-      const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
-      if (workspace) {
-        await herdr.killWorkspace(workspace.id);
-      }
-      await this.deps.removeWorkspace({ root: config.paths.root, shortLink: card.shortLink });
     }
   }
 }

@@ -25,7 +25,11 @@ const loop = new Loop({
   config,
 });
 
-await loop.recover();
+try {
+  await loop.recover();
+} catch (error) {
+  console.error('[fiesta] recover failed', error);
+}
 
 for (;;) {
   try {
