@@ -120,6 +120,18 @@ describe('HerdrClient', () => {
     await expect(new HerdrClient(run).paneStatus('w2:p1')).resolves.toBe('unknown');
   });
 
+  it('sends text verbatim to a pane', async () => {
+    const paneSendText = readFileSync(
+      fileURLToPath(new URL('../test/fixtures/herdr/pane-send-text.json', import.meta.url)),
+      'utf8',
+    );
+    const run = vi.fn().mockResolvedValue(paneSendText);
+
+    await new HerdrClient(run).sendText('pane-1', 'use provider X');
+
+    expect(run).toHaveBeenCalledWith(['pane', 'send-text', 'pane-1', 'use provider X']);
+  });
+
   it('closes the workspace to kill it', async () => {
     const run = vi.fn().mockResolvedValue(respond('workspace-close'));
 
