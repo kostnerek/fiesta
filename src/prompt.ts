@@ -46,8 +46,11 @@ export function buildAgentCommand(params: {
 }): string {
   return [
     'docker run --rm -it',
+    '--network fiesta-net',
     `-v ${params.workspacePath}:/workspace`,
     `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json`,
+    '-v fiesta-pnpm-store:/home/agent/.pnpm-store',
+    '-v fiesta-go-cache:/home/agent/go',
     `--env-file ${params.envFilePath}`,
     'fiesta-agent:latest',
   ].join(' ');

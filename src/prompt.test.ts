@@ -132,3 +132,28 @@ describe('buildAgentCommand stdin', () => {
     expect(command).toContain('docker run --rm -it');
   });
 });
+
+describe('buildAgentCommand build tooling', () => {
+  function build() {
+    return buildAgentCommand({
+      workspacePath: '/w',
+      credentialsPath: '/c.json',
+      envFilePath: '/e',
+    });
+  }
+
+  it('joins the fiesta network, so the agent can reach the build daemon by name', () => {
+    expect(build()).toContain('--network fiesta-net');
+  });
+
+  it('never mounts the host docker socket, which would hand the agent the host', () => {
+    expect(build()).not.toContain('/var/run/docker.sock');
+  });
+
+  it('carries the package and module caches, so an install is not repeated per ticket', () => {
+    const command = build();
+
+    expect(command).toContain('-v fiesta-pnpm-store:/home/agent/.pnpm-store');
+    expect(command).toContain('-v fiesta-go-cache:/home/agent/go');
+  });
+});

@@ -191,6 +191,8 @@ export async function writeAgentEnvFile(params: {
     `FIESTA_PROJECT=${params.ticket.project}`,
     `FIESTA_REPOS=${params.sources.map((source) => `${source.owner}/${source.repo}`).join(',')}`,
     `FIESTA_BASE_BRANCH=${params.ticket.baseBranch}`,
+    'DOCKER_HOST=tcp://fiesta-dind:2375',
+    'TESTCONTAINERS_HOST_OVERRIDE=fiesta-dind',
     `FIESTA_PROMPT_B64=${Buffer.from(params.prompt, 'utf8').toString('base64')}`,
     '',
   ].join('\n');

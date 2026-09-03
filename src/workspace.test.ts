@@ -301,3 +301,21 @@ describe('writeAgentCredentials', () => {
     await expect(stat(path)).rejects.toThrow();
   });
 });
+
+describe('writeAgentEnvFile build daemon', () => {
+  it('points docker at the isolated daemon, so testcontainers never reaches the host', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-env-'));
+    const path = await writeAgentEnvFile({
+      root,
+      owner: 'kostnerek',
+      token: 'gh-token',
+      sources: [],
+      prompt: 'p',
+      ticket,
+    });
+
+    const body = await readFile(path, 'utf8');
+    expect(body).toContain('DOCKER_HOST=tcp://fiesta-dind:2375');
+    expect(body).toContain('TESTCONTAINERS_HOST_OVERRIDE=fiesta-dind');
+  });
+});

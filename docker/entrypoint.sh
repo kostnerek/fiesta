@@ -13,6 +13,10 @@ git config --global core.hooksPath /usr/local/share/git-hooks
 git config --global credential.https://github.com.helper \
   '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
 
+umask 077
+printf '//npm.pkg.github.com/:_authToken=%s\n' "$GITHUB_TOKEN" > "$HOME/.npmrc"
+umask 022
+
 echo "$FIESTA_PROMPT_B64" | base64 -d > /tmp/prompt.txt
 
 exec claude --dangerously-skip-permissions "$(cat /tmp/prompt.txt)"
