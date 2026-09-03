@@ -40,6 +40,12 @@ function slugify(title: string): string {
 }
 
 export function toTicket(card: TrelloCard): Ticket {
+  if (!Array.isArray(card.labels)) {
+    throw new TicketError(
+      `Card "${card.name}" came back from Trello without its labels, so its project is unknown.`,
+    );
+  }
+
   if (card.labels.length !== 1) {
     throw new TicketError(
       `Card "${card.name}" needs exactly one label naming the project, found ${card.labels.length}.`,

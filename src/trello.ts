@@ -62,7 +62,7 @@ export class TrelloClient {
 
   cardsInList(listId: string): Promise<TrelloCard[]> {
     return this.request(`/lists/${listId}/cards`, {
-      params: { fields: 'id,shortLink,name,desc,idList', labels: 'all' },
+      params: { fields: 'id,shortLink,name,desc,idList,labels' },
     });
   }
 

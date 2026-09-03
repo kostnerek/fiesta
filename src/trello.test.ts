@@ -37,3 +37,13 @@ describe('TrelloClient', () => {
     await expect(makeClient(fetchMock).me()).rejects.toThrow(/401.*invalid token/s);
   });
 });
+
+describe('TrelloClient.cardsInList', () => {
+  it('asks for labels as a card field, since a card without them has no project', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
+    await makeClient(fetchMock).cardsInList('list-1');
+
+    const fields = new URL(fetchMock.mock.calls[0]![0] as string).searchParams.get('fields');
+    expect(fields?.split(',')).toContain('labels');
+  });
+});

@@ -62,3 +62,11 @@ describe('toTicket', () => {
     expect(() => toTicket(card)).toThrow(TicketError);
   });
 });
+
+describe('toTicket when Trello omits labels', () => {
+  it('reports a readable error instead of crashing on undefined', () => {
+    const card = { ...makeCard(), labels: undefined } as unknown as TrelloCard;
+    expect(() => toTicket(card)).toThrow(TicketError);
+    expect(() => toTicket(card)).toThrow(/without its labels/);
+  });
+});
