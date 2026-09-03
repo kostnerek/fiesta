@@ -11,10 +11,13 @@ import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js
 import type { TelegramClient } from './telegram.js';
 import type { TrelloClient } from './trello.js';
 import {
+  clearBookmark,
   formatFeedback,
   highestCommentId,
   type PrComment,
+  readBookmark,
   unseenComments,
+  writeBookmark,
 } from './review-feedback.js';
 import type { removeWorkspace } from './workspace.js';
 
@@ -45,7 +48,6 @@ export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
   private readonly lastMarker = new Map<string, Marker>();
   private readonly dispatchFailures = new Map<string, number>();
-  private readonly lastCommentId = new Map<string, number | null>();
   private tickFailures = 0;
   private credentialsWarned = false;
 
@@ -263,12 +265,7 @@ export class Loop {
 
     for (const pr of open) {
       const comments = await github.listPrComments(pr.owner, pr.repo, pr.number);
-      const seen = this.lastCommentId.get(shortLink) ?? null;
-
-      if (!this.lastCommentId.has(shortLink)) {
-        this.lastCommentId.set(shortLink, highestCommentId(comments));
-        continue;
-      }
+      const seen = await readBookmark(config.paths.root, shortLink);
 
       const fresh: PrComment[] = unseenComments({
         comments,
@@ -287,8 +284,14 @@ export class Loop {
         continue;
       }
 
-      await herdr.sendText(await herdr.firstPaneId(workspace.id), formatFeedback({ prUrl: pr.url, comments: fresh }));
-      this.lastCommentId.set(shortLink, highestCommentId(comments));
+      await herdr.sendText(
+        await herdr.firstPaneId(workspace.id),
+        formatFeedback({ prUrl: pr.url, comments: fresh }),
+      );
+      const highest = highestCommentId(comments);
+      if (highest !== null) {
+        await writeBookmark(config.paths.root, shortLink, highest);
+      }
     }
   }
 
@@ -328,7 +331,7 @@ export class Loop {
         if (workspace) {
           await herdr.killWorkspace(workspace.id);
         }
-        this.lastCommentId.delete(card.shortLink);
+        await clearBookmark(config.paths.root, card.shortLink);
         await this.deps.removeWorkspace({ root: config.paths.root, shortLink: card.shortLink });
       } catch (error) {
         console.error(`[fiesta] closeMerged: failed to reconcile card ${card.shortLink}`, error);

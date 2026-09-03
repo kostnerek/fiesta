@@ -211,6 +211,8 @@ export async function removeWorkspace(params: { root: string; shortLink: string 
 
   await rm(target, { recursive: true, force: true });
 
+  await rm(join(params.root, 'state', `${params.shortLink}.comments`), { force: true });
+
   const envBase = resolve(params.root, 'env');
   for (const path of [
     agentEnvPath(params.root, params.shortLink),

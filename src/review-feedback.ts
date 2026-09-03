@@ -1,3 +1,6 @@
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 export type PrComment = {
   id: number;
   author: string;
@@ -40,4 +43,27 @@ export function formatFeedback(params: { prUrl: string; comments: PrComment[] })
     'End your turn with @@FIESTA:DONE and the pull request URL, or @@FIESTA:ASK if you need a',
     'decision only a human can make.',
   ].join('\n');
+}
+
+export function bookmarkPath(root: string, shortLink: string): string {
+  return join(root, 'state', `${shortLink}.comments`);
+}
+
+export async function readBookmark(root: string, shortLink: string): Promise<number | null> {
+  try {
+    const raw = await readFile(bookmarkPath(root, shortLink), 'utf8');
+    const value = Number.parseInt(raw.trim(), 10);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeBookmark(root: string, shortLink: string, id: number): Promise<void> {
+  await mkdir(join(root, 'state'), { recursive: true });
+  await writeFile(bookmarkPath(root, shortLink), `${id}\n`);
+}
+
+export async function clearBookmark(root: string, shortLink: string): Promise<void> {
+  await rm(bookmarkPath(root, shortLink), { force: true });
 }

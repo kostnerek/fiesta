@@ -1,9 +1,16 @@
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  bookmarkPath,
+  clearBookmark,
   formatFeedback,
   highestCommentId,
   type PrComment,
+  readBookmark,
   unseenComments,
+  writeBookmark,
 } from './review-feedback.js';
 
 function comment(overrides: Partial<PrComment> = {}): PrComment {
@@ -72,5 +79,38 @@ describe('formatFeedback', () => {
   it('offers disagreement as a reply rather than silent compliance', () => {
     const text = formatFeedback({ prUrl: 'https://pr/7', comments: [comment()] });
     expect(text).toMatch(/reply to it on the PR explaining why/);
+  });
+});
+
+describe('the comment bookmark', () => {
+  it('is absent before anything was handled, so the first look delivers', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-bookmark-'));
+    await expect(readBookmark(root, 'aBcD1234')).resolves.toBeNull();
+  });
+
+  it('survives being written and read back, so a restart does not replay', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-bookmark-'));
+    await writeBookmark(root, 'aBcD1234', 42);
+    await expect(readBookmark(root, 'aBcD1234')).resolves.toBe(42);
+  });
+
+  it('is per ticket', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-bookmark-'));
+    await writeBookmark(root, 'aaaa1111', 42);
+    await expect(readBookmark(root, 'bbbb2222')).resolves.toBeNull();
+  });
+
+  it('reads as absent when the file holds nonsense', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-bookmark-'));
+    await mkdir(join(root, 'state'), { recursive: true });
+    await writeFile(bookmarkPath(root, 'aBcD1234'), 'not a number');
+    await expect(readBookmark(root, 'aBcD1234')).resolves.toBeNull();
+  });
+
+  it('is cleared when the ticket is done', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-bookmark-'));
+    await writeBookmark(root, 'aBcD1234', 42);
+    await clearBookmark(root, 'aBcD1234');
+    await expect(readBookmark(root, 'aBcD1234')).resolves.toBeNull();
   });
 });

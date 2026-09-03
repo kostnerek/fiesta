@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { Loop, MAX_DISPATCH_FAILURES, MAX_TICK_FAILURES } from './loop.js';
 import type { TrelloCard } from './ticket.js';
@@ -84,7 +87,7 @@ function build(
       },
       github: { owner: 'kostnerek', token: 'gh' },
       limits: { maxActive: 1 },
-      paths: { root: '/root' },
+      paths: { root: mkdtempSync(join(tmpdir(), 'fiesta-loop-')) },
     } as never,
   });
   return { loop, trello, herdr, dispatcher, github, escalator, telegram, projects, checkCredentials };
@@ -417,17 +420,18 @@ describe('Loop review feedback', () => {
     return built;
   }
 
-  it('does not replay comments that were already there when it first looked', async () => {
+  it('delivers feedback that was already waiting the first time it looks', async () => {
     const { loop, herdr } = reviewing({
       comments: [{ id: 5, author: 'ola', body: 'old note', path: null, line: null }],
     });
 
     await loop.tick();
 
-    expect(herdr.sendText).not.toHaveBeenCalled();
+    expect(herdr.sendText).toHaveBeenCalledTimes(1);
+    expect(herdr.sendText.mock.calls[0]![1]).toContain('old note');
   });
 
-  it('delivers a comment left after it started watching', async () => {
+  it('delivers a comment left after the previous one was handled', async () => {
     const { loop, herdr, github } = reviewing({ comments: [] });
     await loop.tick();
 
