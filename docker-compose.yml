@@ -1,0 +1,10 @@
+services:
+  fiesta:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - /mnt/user/appdata/fiesta:/mnt/user/appdata/fiesta
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${CLAUDE_CREDENTIALS_PATH}:${CLAUDE_CREDENTIALS_PATH}:ro
+    network_mode: host
