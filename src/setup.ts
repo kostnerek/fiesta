@@ -6,10 +6,15 @@ import { GitHubClient } from './github.js';
 import { COLUMN_TITLES, detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
 import { TelegramClient } from './telegram.js';
 import {
+  chooseInstallDir,
   credentialsFile,
   defaultToolRunner,
+  exportHint,
   findMissingTools,
   hasCredentialsFile,
+  isOnPath,
+  npmGlobalBinDir,
+  prependToPath,
   REQUIRED_TOOLS,
   survivesUnraidReboot,
   unsupportedNodeVersion,
@@ -33,14 +38,36 @@ async function ensureTools(): Promise<void> {
       throw new Error(`${tool.name} is not available. ${tool.hint}`);
     }
 
-    await defaultToolRunner(tool.install.command, tool.install.args);
+    const originalPath = process.env.PATH;
+    const installDir = await chooseInstallDir(originalPath);
+    const env = tool.install.installDirEnv
+      ? { ...process.env, [tool.install.installDirEnv]: installDir }
+      : undefined;
 
-    if ((await findMissingTools([tool], defaultToolRunner)).length > 0) {
+    await defaultToolRunner(tool.install.command, tool.install.args, env);
+
+    for (const candidate of [installDir, await npmGlobalBinDir()]) {
+      if (candidate) {
+        prependToPath(process.env, candidate);
+      }
+    }
+
+    const stillMissing = await findMissingTools([tool], defaultToolRunner);
+    if (stillMissing.length > 0) {
       throw new Error(
-        `${tool.name} was installed but is not on PATH in this shell. Open a new shell and run setup again.`,
+        `${tool.name} was installed but cannot be run. Check the installer output above.`,
       );
     }
+
     console.log(`Installed ${tool.name}.`);
+    if (!isOnPath(originalPath, installDir)) {
+      console.log(`\n${installDir} is not on your PATH. Setup will carry on regardless, but the`);
+      console.log('daemon needs it too, so add this to the shell that starts fiesta:');
+      console.log(`  ${exportHint(installDir)}`);
+      if (!survivesUnraidReboot(installDir)) {
+        console.log('On Unraid this directory is lost on reboot — reinstall it from your user script.');
+      }
+    }
   }
 }
 
@@ -150,7 +177,7 @@ async function main(): Promise<void> {
   await chmod(envPath, 0o600);
 
   console.log(`\nWrote ${envPath}.`);
-  console.log('Add one label per repository on the board, then start the daemon with: fiesta start');
+  console.log('Next: add a project with "fiesta project", then start the daemon with "fiesta start".');
   console.log('herdr must be running before the daemon starts, and neither survives an Unraid reboot');
   console.log('on its own — start both from a user script if you want them back after a restart.');
 }

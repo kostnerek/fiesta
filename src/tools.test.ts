@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  chooseInstallDir,
   credentialsFile,
+  exportHint,
+  isOnPath,
+  prependToPath,
   findMissingTools,
   hasCredentialsFile,
   REQUIRED_TOOLS,
@@ -82,5 +86,33 @@ describe('survivesUnraidReboot', () => {
     ['/usr/local/bin', false],
   ])('%s -> %s', (path, expected) => {
     expect(survivesUnraidReboot(path)).toBe(expected);
+  });
+});
+
+describe('PATH handling', () => {
+  it('reports whether a directory is on PATH', () => {
+    expect(isOnPath('/usr/bin:/usr/local/bin', '/usr/local/bin')).toBe(true);
+    expect(isOnPath('/usr/bin', '/root/.local/bin')).toBe(false);
+    expect(isOnPath(undefined, '/usr/local/bin')).toBe(false);
+  });
+
+  it('prepends a directory once and leaves an existing one alone', () => {
+    const env: NodeJS.ProcessEnv = { PATH: '/usr/bin' };
+    prependToPath(env, '/root/.local/bin');
+    prependToPath(env, '/root/.local/bin');
+    expect(env.PATH).toBe('/root/.local/bin:/usr/bin');
+  });
+
+  it('gives an export line the user can paste', () => {
+    expect(exportHint('/root/.local/bin')).toBe('export PATH="/root/.local/bin:$PATH"');
+  });
+
+  it('installs into a writable directory that is already on PATH', async () => {
+    const writable = await mkdtemp(join(tmpdir(), 'fiesta-bin-'));
+    await expect(chooseInstallDir(`/definitely/not/there:${writable}`)).resolves.toBe(writable);
+  });
+
+  it('falls back to ~/.local/bin when nothing on PATH is writable', async () => {
+    await expect(chooseInstallDir('/definitely/not/there')).resolves.toMatch(/\.local\/bin$/);
   });
 });

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { access } from 'node:fs/promises';
+import { access, constants, mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -7,12 +8,16 @@ const execFileAsync = promisify(execFile);
 
 export const MINIMUM_NODE_MAJOR = 22;
 
-export type ToolRunner = (command: string, args: string[]) => Promise<void>;
+export type ToolRunner = (
+  command: string,
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+) => Promise<void>;
 
 export type Tool = {
   name: string;
   probe: { command: string; args: string[] };
-  install?: { command: string; args: string[]; describe: string };
+  install?: { command: string; args: string[]; describe: string; installDirEnv?: string };
   hint: string;
 };
 
@@ -44,14 +49,24 @@ export const REQUIRED_TOOLS: Tool[] = [
       command: 'sh',
       args: ['-c', 'curl -fsSL https://herdr.dev/install.sh | sh'],
       describe: 'curl -fsSL https://herdr.dev/install.sh | sh',
+      installDirEnv: 'HERDR_INSTALL_DIR',
     },
     hint: 'Install herdr from https://herdr.dev/docs/install/, then run setup again.',
   },
 ];
 
-export const defaultToolRunner: ToolRunner = async (command, args) => {
-  await execFileAsync(command, args);
+export const defaultToolRunner: ToolRunner = async (command, args, env) => {
+  await execFileAsync(command, args, env ? { env } : {});
 };
+
+export async function npmGlobalBinDir(): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('npm', ['prefix', '-g']);
+    return join(stdout.trim(), 'bin');
+  } catch {
+    return null;
+  }
+}
 
 export async function findMissingTools(tools: Tool[], run: ToolRunner): Promise<Tool[]> {
   const missing: Tool[] = [];
@@ -84,6 +99,40 @@ export async function hasCredentialsFile(directory: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export function pathEntries(pathEnv: string | undefined): string[] {
+  return (pathEnv ?? '').split(':').filter((entry) => entry.length > 0);
+}
+
+export function isOnPath(pathEnv: string | undefined, directory: string): boolean {
+  return pathEntries(pathEnv).includes(directory);
+}
+
+export function prependToPath(env: NodeJS.ProcessEnv, directory: string): void {
+  if (!isOnPath(env.PATH, directory)) {
+    env.PATH = `${directory}:${env.PATH ?? ''}`;
+  }
+}
+
+export function exportHint(directory: string): string {
+  return `export PATH="${directory}:$PATH"`;
+}
+
+export async function chooseInstallDir(pathEnv: string | undefined): Promise<string> {
+  const onPath = pathEntries(pathEnv);
+  for (const candidate of onPath) {
+    try {
+      await access(candidate, constants.W_OK);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  const fallback = `${homedir()}/.local/bin`;
+  await mkdir(fallback, { recursive: true });
+  return fallback;
 }
 
 export function survivesUnraidReboot(path: string): boolean {
