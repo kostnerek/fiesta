@@ -111,7 +111,9 @@ There is no repository registration step. A card is assigned to a repository
 by giving it **exactly one label** whose name is the repository name (e.g.
 `tsoft`). The daemon reads that label via `src/ticket.ts` and clones/mirrors
 `github.com/<GITHUB_OWNER>/<label>`. A card with zero or more than one label
-is rejected with an error posted back to the card.
+is sent to `Backlog` with the error posted back to the card; fix the label
+and move it to `Ready` again. `Backlog` is the ignored column, so a rejected
+card stays put instead of being cycled back into `Ready` by the orphan rule.
 
 Optionally add a line `base: <branch>` to the card description to target a
 base branch other than `main`.

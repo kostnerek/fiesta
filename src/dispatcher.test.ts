@@ -29,7 +29,9 @@ function build() {
     herdr: herdr as never,
     git: git as never,
     config: {
-      trello: { lists: { inProgress: 'list-progress', blocked: 'list-blocked' } },
+      trello: {
+        lists: { backlog: 'list-backlog', inProgress: 'list-progress', blocked: 'list-blocked' },
+      },
       github: { owner: 'kostnerek', token: 'gh' },
       paths: { root: '/root', claudeCredentials: '/creds' },
     } as never,
@@ -54,11 +56,12 @@ describe('Dispatcher.claimAndStart', () => {
     expect(herdr.createWorkspace).toHaveBeenCalledWith('aBcD1234', '/root/work/aBcD1234');
   });
 
-  it('sends an unreadable card to Blocked instead of guessing the repo', async () => {
+  it('sends an unreadable card to Backlog, out of reach of the orphan rule', async () => {
     const { dispatcher, trello, git } = build();
     await dispatcher.claimAndStart(makeCard({ labels: [] }));
 
-    expect(trello.moveCard).toHaveBeenLastCalledWith('card-1', 'list-blocked');
+    expect(trello.moveCard).toHaveBeenLastCalledWith('card-1', 'list-backlog');
+    expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-blocked');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/exactly one label/));
     expect(git.ensureMirror).not.toHaveBeenCalled();
   });

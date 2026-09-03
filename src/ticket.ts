@@ -19,7 +19,12 @@ export type Ticket = {
   branch: string;
 };
 
-export class TicketError extends Error {}
+export class TicketError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TicketError';
+  }
+}
 
 const BASE_BRANCH_LINE = /^base:[ \t]*(\S+)[ \t]*$/m;
 const SHORT_LINK = /^[A-Za-z0-9]+$/;

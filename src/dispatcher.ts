@@ -30,8 +30,11 @@ export class Dispatcher {
       if (!(error instanceof TicketError)) {
         throw error;
       }
-      await trello.moveCard(card.id, config.trello.lists.blocked);
-      await trello.addComment(card.id, `🤖 ${error.message}`);
+      await trello.moveCard(card.id, config.trello.lists.backlog);
+      await trello.addComment(
+        card.id,
+        `🤖 ${error.message} Fix the card and move it back to Ready.`,
+      );
       return;
     }
 

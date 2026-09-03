@@ -143,11 +143,15 @@ In Trello, in the `Ready` column:
   seeing the board. Check the daemon log for repeated tick errors, and
   double check `TRELLO_BOARD_ID` / `TRELLO_API_KEY` / `TRELLO_TOKEN` in
   `.env`.
-- Card moves straight to **`Blocked`** with a comment like `🤖 Card "Add
-  HELLO file" needs exactly one label naming the repository, found 0.` (or
-  `found 2`) → the label is missing, misspelled, or there's more than one
-  label on the card. Fix the label and move the card back to `Ready`
-  yourself (the daemon won't retry a rejected card automatically).
+- Card moves straight to **`Backlog`** with a comment like `🤖 Card "Add
+  HELLO file" needs exactly one label naming the repository, found 0. Fix
+  the card and move it back to Ready.` (or `found 2`) → the label is
+  missing, misspelled, or there's more than one label on the card. Fix the
+  label and move the card back to `Ready` yourself (the daemon won't retry
+  a rejected card automatically). It lands in `Backlog` rather than
+  `Blocked` on purpose: `Backlog` is the ignored column, so the rejected
+  card sits still instead of being picked up again by the orphan rule,
+  which returns any workspace-less `Blocked` card to `Ready`.
 
 ### Step A3: Workspace and agent are live
 

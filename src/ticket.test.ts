@@ -46,6 +46,17 @@ describe('toTicket', () => {
     expect(() => toTicket(card)).toThrow(TicketError);
   });
 
+  it('names itself in log output instead of a bare "Error:"', () => {
+    let caught: unknown;
+    try {
+      toTicket(makeCard({ labels: [] }));
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as Error).name).toBe('TicketError');
+    expect(String(caught)).toMatch(/^TicketError: /);
+  });
+
   it('rejects a card whose shortLink contains shell metacharacters', () => {
     const card = makeCard({ shortLink: 'aB;rm -rf /' });
     expect(() => toTicket(card)).toThrow(TicketError);
