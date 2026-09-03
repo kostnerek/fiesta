@@ -11,7 +11,8 @@ RUN useradd --create-home --uid 1001 agent \
  && chown -R agent:agent /home/agent/.claude
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY docker/githooks /usr/local/share/git-hooks
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/share/git-hooks/*
 
 COPY skills /home/agent/.claude/skills
 RUN chown -R agent:agent /home/agent && chmod -R a+rwX /home/agent

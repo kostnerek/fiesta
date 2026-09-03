@@ -8,6 +8,7 @@ set -euo pipefail
 git config --global user.name "$GITHUB_OWNER"
 git config --global user.email "$GITHUB_OWNER@users.noreply.github.com"
 git config --global --add safe.directory '*'
+git config --global core.hooksPath /usr/local/share/git-hooks
 
 git config --global credential.https://github.com.helper \
   '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
