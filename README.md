@@ -52,17 +52,21 @@ into a container image.
 ## Build the agent image
 
 Every card is worked by a fresh, throwaway container built from
-`docker/agent.Dockerfile`. Build it once (and rebuild whenever it changes):
+`docker/agent.Dockerfile`. It's built from the repo root (it copies in
+`skills/`, which lives there, not under `docker/`). Build it once (and
+rebuild whenever it or `skills/` changes):
 
 ```bash
-docker build -t fiesta-agent:latest -f docker/agent.Dockerfile docker/
+docker build -t fiesta-agent:latest -f docker/agent.Dockerfile .
 ```
 
 This image contains `git`, `curl`, `jq` and the `claude` CLI, plus an
 `entrypoint.sh` that configures git identity, decodes the base64-encoded
 prompt from `FIESTA_PROMPT_B64`, and launches
-`claude --dangerously-skip-permissions <prompt>`. The daemon mounts your
-Claude credentials **file** (not the whole directory) read-only into it at
+`claude --dangerously-skip-permissions <prompt>`, and the `orchestrate-ticket`
+/ `verify-ticket` skills (from `skills/`) copied to
+`/home/agent/.claude/skills`. The daemon mounts your Claude credentials
+**file** (not the whole directory) read-only into it at
 `/home/agent/.claude/.credentials.json`; `/home/agent/.claude` itself stays a
 real, writable directory owned by the `agent` user inside the image so that
 mount only overlays the one file.

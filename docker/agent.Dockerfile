@@ -10,8 +10,11 @@ RUN useradd --create-home --uid 1001 agent \
  && mkdir -p /home/agent/.claude \
  && chown -R agent:agent /home/agent/.claude
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+COPY skills /home/agent/.claude/skills
+RUN chown -R agent:agent /home/agent/.claude
 
 USER agent
 WORKDIR /workspace
