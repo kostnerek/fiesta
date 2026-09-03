@@ -2,6 +2,7 @@ import { chmod, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { confirm, input, password, select } from '@inquirer/prompts';
+import { checkCredentials } from './claude-credentials.js';
 import { GitHubClient } from './github.js';
 import {
   askUntilValid,
@@ -78,13 +79,22 @@ async function ensureTools(): Promise<void> {
 }
 
 async function requireSignedInClaude(directory: string): Promise<void> {
-  while (!(await hasCredentialsFile(directory))) {
-    console.log(`\nNo Claude credentials at ${credentialsFile(directory)}.`);
+  for (;;) {
+    const path = credentialsFile(directory);
+    const state = (await hasCredentialsFile(directory))
+      ? await checkCredentials(path, Date.now())
+      : ({ usable: false, reason: `no credentials file at ${path}` } as const);
+
+    if (state.usable) {
+      return;
+    }
+
+    console.log(`\nClaude is not usable: ${state.reason}.`);
     console.log('Agents authenticate with that file, so every ticket would fail without it.');
     console.log('Run "claude" in another shell and sign in.');
     const retry = await confirm({ message: 'Signed in? Check again.' });
     if (!retry) {
-      throw new Error(`Claude is not signed in: no credentials file at ${credentialsFile(directory)}.`);
+      throw new Error(`Claude is not signed in: ${state.reason}.`);
     }
   }
 }

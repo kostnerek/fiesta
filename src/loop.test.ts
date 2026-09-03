@@ -49,6 +49,7 @@ function build(
     deliverReplies: vi.fn(),
   };
   const telegram = { send: vi.fn() };
+  const checkCredentials = vi.fn().mockResolvedValue({ usable: true });
   const projects = {
     readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
     resolveProject: vi.fn().mockReturnValue(['demo']),
@@ -68,6 +69,7 @@ function build(
     escalator: escalator as never,
     telegram: telegram as never,
     removeWorkspace: vi.fn(),
+    checkCredentials,
     config: {
       telegram: { chatId: '42' },
       trello: {
@@ -85,7 +87,7 @@ function build(
       paths: { root: '/root' },
     } as never,
   });
-  return { loop, trello, herdr, dispatcher, github, escalator, telegram, projects };
+  return { loop, trello, herdr, dispatcher, github, escalator, telegram, projects, checkCredentials };
 }
 
 describe('Loop.recover', () => {
@@ -484,5 +486,35 @@ describe('Loop review feedback', () => {
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-done');
     expect(github.listPrComments).not.toHaveBeenCalled();
     expect(herdr.killWorkspace).toHaveBeenCalled();
+  });
+});
+
+describe('Loop when the Claude session has expired', () => {
+  it('starts nothing and says why, once', async () => {
+    const { loop, dispatcher, telegram, checkCredentials } = build({ ready: [makeCard()] });
+    checkCredentials.mockResolvedValue({ usable: false, reason: 'the access token has expired' });
+
+    await loop.tick();
+    await loop.tick();
+
+    expect(dispatcher.claimAndStart).not.toHaveBeenCalled();
+    expect(telegram.send).toHaveBeenCalledTimes(1);
+    expect(telegram.send.mock.calls[0]![1]).toMatch(/access token has expired/);
+    expect(telegram.send.mock.calls[0]![1]).toMatch(/Run "claude" on the server/);
+  });
+
+  it('picks up again after a fresh sign-in, and warns again if it lapses later', async () => {
+    const { loop, dispatcher, telegram, checkCredentials } = build({ ready: [makeCard()] });
+
+    checkCredentials.mockResolvedValue({ usable: false, reason: 'expired' });
+    await loop.tick();
+
+    checkCredentials.mockResolvedValue({ usable: true });
+    await loop.tick();
+    expect(dispatcher.claimAndStart).toHaveBeenCalledTimes(1);
+
+    checkCredentials.mockResolvedValue({ usable: false, reason: 'expired again' });
+    await loop.tick();
+    expect(telegram.send).toHaveBeenCalledTimes(2);
   });
 });

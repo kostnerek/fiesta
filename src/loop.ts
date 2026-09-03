@@ -1,3 +1,4 @@
+import type { checkCredentials } from './claude-credentials.js';
 import type { Config } from './config.js';
 import type { Dispatcher } from './dispatcher.js';
 import type { ActiveTicket, Escalator } from './escalator.js';
@@ -46,6 +47,7 @@ export class Loop {
   private readonly dispatchFailures = new Map<string, number>();
   private readonly lastCommentId = new Map<string, number | null>();
   private tickFailures = 0;
+  private credentialsWarned = false;
 
   constructor(
     private readonly deps: {
@@ -61,6 +63,7 @@ export class Loop {
       escalator: Escalator;
       telegram: TelegramClient;
       removeWorkspace: typeof removeWorkspace;
+      checkCredentials: typeof checkCredentials;
       config: Config;
     },
   ) {}
@@ -143,10 +146,32 @@ export class Loop {
     if (inProgress.length + blocked.length < config.limits.maxActive) {
       const ready = await trello.cardsInList(config.trello.lists.ready);
       const next = ready[0];
-      if (next) {
+      if (next && (await this.claudeIsUsable())) {
         await this.dispatch(next);
       }
     }
+  }
+
+  private async claudeIsUsable(): Promise<boolean> {
+    const { config } = this.deps;
+    const state = await this.deps.checkCredentials(
+      `${config.paths.claudeCredentials}/.credentials.json`,
+      Date.now(),
+    );
+
+    if (state.usable) {
+      this.credentialsWarned = false;
+      return true;
+    }
+
+    console.error(`[fiesta] not starting anything: ${state.reason}`);
+    if (!this.credentialsWarned) {
+      this.credentialsWarned = true;
+      await this.notify(
+        `🤖 Fiesta is not starting tickets: ${state.reason}.\n\nRun "claude" on the server and sign in; it will pick up again on its own.`,
+      );
+    }
+    return false;
   }
 
   private async dispatch(card: TrelloCard): Promise<void> {

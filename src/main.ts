@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { banner, startupLines } from './banner.js';
+import { checkCredentials } from './claude-credentials.js';
 import { Dispatcher } from './dispatcher.js';
 import { loadConfig } from './config.js';
 import { Escalator } from './escalator.js';
@@ -70,6 +71,7 @@ const loop = new Loop({
   escalator: new Escalator({ herdr, telegram, trello, config }),
   telegram,
   removeWorkspace,
+  checkCredentials,
   config,
 });
 

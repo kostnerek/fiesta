@@ -47,7 +47,7 @@ export function buildAgentCommand(params: {
   return [
     'docker run --rm -it',
     `-v ${params.workspacePath}:/workspace`,
-    `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json:ro`,
+    `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json`,
     `--env-file ${params.envFilePath}`,
     'fiesta-agent:latest',
   ].join(' ');

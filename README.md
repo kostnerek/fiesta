@@ -48,8 +48,8 @@ same thing.
   (`curl -fsSL https://herdr.dev/install.sh | sh`) — showing the exact
   command and asking first. It will not touch Docker or git: those are
   system-level, and on Unraid Docker is built in;
-- **checks that Claude is actually signed in**, by confirming
-  `<credentials dir>/.credentials.json` exists. Agents authenticate with
+- **checks that Claude is actually signed in and not expired**, by reading
+  the token expiry out of `<credentials dir>/.credentials.json`. Agents authenticate with
   that file; without it every ticket fails, and Docker would silently mount
   an empty directory in its place rather than complaining;
 - walks you through Trello (API key + token), creates any missing board

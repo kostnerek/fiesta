@@ -54,7 +54,7 @@ describe('buildAgentCommand', () => {
   it('mounts only the credentials file, not the whole .claude directory', () => {
     const command = build();
 
-    expect(command).toContain('.credentials.json:/home/agent/.claude/.credentials.json:ro');
+    expect(command).toContain('.credentials.json:/home/agent/.claude/.credentials.json');
     expect(command).not.toContain(':/home/agent/.claude:ro');
   });
 
@@ -116,7 +116,7 @@ describe('buildAgentCommand ownership', () => {
     });
 
     expect(command).toContain(
-      '-v /root/env/aBcD1234.credentials.json:/home/agent/.claude/.credentials.json:ro',
+      '-v /root/env/aBcD1234.credentials.json:/home/agent/.claude/.credentials.json',
     );
   });
 });
