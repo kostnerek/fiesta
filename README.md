@@ -22,22 +22,36 @@ daemon" below for why.
   daemon.** This is the single most common way to break Fiesta: every
   `herdr` command (workspace create, pane run, pane read, pane send-text,
   ...) fails with `server_not_running` unless a `herdr` server is already
-  up. Start/attach a herdr server **before** running `pnpm setup` or
+  up. Start/attach a herdr server **before** running `fiesta setup` or
   starting the daemon, and keep it running for the daemon's entire
   lifetime. The daemon (`src/herdr.ts`) shells out to a `herdr` binary in
   `PATH`, so it needs to be on the same `PATH` as the process running
-  `pnpm start`.
+  `fiesta start`.
 
 ## Setup
 
+On the server, one command — nothing to clone or install first:
+
 ```bash
-pnpm install
-pnpm setup
+npx github:kostnerek/fiesta setup
 ```
 
-`pnpm setup` is an interactive, idempotent wizard. It:
+Working on the repo locally instead? `pnpm install && pnpm setup` does the
+same thing.
 
-- checks that `herdr`, `docker` and `git` are on `PATH`;
+`fiesta setup` is an interactive, idempotent wizard. It:
+
+- verifies Node 22+, that `git` is present, and that the Docker **daemon
+  answers** (`docker info`) rather than merely that the binary exists;
+- offers to install what it safely can — Claude Code
+  (`npm install -g @anthropic-ai/claude-code`) and herdr
+  (`curl -fsSL https://herdr.dev/install.sh | sh`) — showing the exact
+  command and asking first. It will not touch Docker or git: those are
+  system-level, and on Unraid Docker is built in;
+- **checks that Claude is actually signed in**, by confirming
+  `<credentials dir>/.credentials.json` exists. Agents authenticate with
+  that file; without it every ticket fails, and Docker would silently mount
+  an empty directory in its place rather than complaining;
 - walks you through Trello (API key + token), creates any missing board
   columns (`Backlog`, `Ready`, `In Progress`, `Blocked`, `Review`, `Done`);
 - walks you through Telegram (bot token, auto-detects your chat id) and
@@ -87,7 +101,7 @@ itself with a `curl`/`jq` REST call, as spelled out in
 ## Run the daemon
 
 ```bash
-pnpm start
+fiesta start
 ```
 
 Fiesta runs directly on the host, next to `herdr` — there is no
@@ -107,7 +121,7 @@ container (`docker/agent.Dockerfile`), which every ticket runs inside,
 unchanged by any of this.
 
 **Surviving a reboot.** Unraid keeps its OS in RAM, so neither `herdr` nor
-`pnpm start` will still be running after a restart unless something
+`fiesta start` will still be running after a restart unless something
 restarts them. Wiring that up — a user script, a system service, or
 whatever mechanism you already use for other long-running processes on the
 box — is on the operator; this repo doesn't prescribe one. Whatever you

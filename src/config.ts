@@ -45,7 +45,7 @@ function positiveNumber(name: string, raw: string | undefined, fallback: number)
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const missing = REQUIRED.filter((name) => !env[name]);
   if (missing.length > 0) {
-    throw new Error(`Missing configuration: ${missing.join(', ')}. Run "pnpm setup".`);
+    throw new Error(`Missing configuration: ${missing.join(', ')}. Run "fiesta setup".`);
   }
 
   const lists = Object.fromEntries(

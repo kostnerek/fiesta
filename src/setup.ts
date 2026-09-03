@@ -1,32 +1,63 @@
-import { execFile } from 'node:child_process';
 import { chmod, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { confirm, input, password, select } from '@inquirer/prompts';
 import { GitHubClient } from './github.js';
 import { COLUMN_TITLES, detectChatId, ensureColumns, renderEnvFile } from './setup-steps.js';
 import { TelegramClient } from './telegram.js';
+import {
+  credentialsFile,
+  defaultToolRunner,
+  findMissingTools,
+  hasCredentialsFile,
+  REQUIRED_TOOLS,
+  survivesUnraidReboot,
+  unsupportedNodeVersion,
+} from './tools.js';
 import { TrelloClient } from './trello.js';
 
-const execFileAsync = promisify(execFile);
-
-async function requireBinaries(): Promise<void> {
-  const missing: string[] = [];
-  for (const binary of ['herdr', 'docker', 'git']) {
-    try {
-      await execFileAsync('which', [binary]);
-    } catch {
-      missing.push(binary);
-    }
+async function ensureTools(): Promise<void> {
+  const nodeProblem = unsupportedNodeVersion(process.versions.node);
+  if (nodeProblem) {
+    throw new Error(nodeProblem);
   }
-  if (missing.length > 0) {
-    throw new Error(`Missing required binaries: ${missing.join(', ')}`);
+
+  for (const tool of await findMissingTools(REQUIRED_TOOLS, defaultToolRunner)) {
+    if (!tool.install) {
+      throw new Error(`${tool.name} is not available. ${tool.hint}`);
+    }
+
+    console.log(`\n${tool.name} is not installed.`);
+    const approved = await confirm({ message: `Run "${tool.install.describe}" now?` });
+    if (!approved) {
+      throw new Error(`${tool.name} is not available. ${tool.hint}`);
+    }
+
+    await defaultToolRunner(tool.install.command, tool.install.args);
+
+    if ((await findMissingTools([tool], defaultToolRunner)).length > 0) {
+      throw new Error(
+        `${tool.name} was installed but is not on PATH in this shell. Open a new shell and run setup again.`,
+      );
+    }
+    console.log(`Installed ${tool.name}.`);
+  }
+}
+
+async function requireSignedInClaude(directory: string): Promise<void> {
+  while (!(await hasCredentialsFile(directory))) {
+    console.log(`\nNo Claude credentials at ${credentialsFile(directory)}.`);
+    console.log('Agents authenticate with that file, so every ticket would fail without it.');
+    console.log('Run "claude" in another shell and sign in.');
+    const retry = await confirm({ message: 'Signed in? Check again.' });
+    if (!retry) {
+      throw new Error(`Claude is not signed in: no credentials file at ${credentialsFile(directory)}.`);
+    }
   }
 }
 
 async function main(): Promise<void> {
-  await requireBinaries();
+  await ensureTools();
   console.log('\n=== Trello ===');
   console.log('Open https://trello.com/power-ups/admin and copy your API key.');
   const trelloKey = await password({ message: 'Trello API key:' });
@@ -77,6 +108,12 @@ async function main(): Promise<void> {
     message: 'Claude credentials directory:',
     default: process.env.CLAUDE_CREDENTIALS_PATH || join(homedir(), '.claude'),
   });
+  await requireSignedInClaude(claudeCredentials);
+
+  if (!survivesUnraidReboot(root)) {
+    console.log(`\nWarning: ${root} is outside /mnt and /boot.`);
+    console.log('On Unraid the OS runs from RAM, so that data would not survive a reboot.');
+  }
 
   const envPath = join(process.cwd(), '.env');
   await writeFile(
@@ -103,7 +140,9 @@ async function main(): Promise<void> {
   await chmod(envPath, 0o600);
 
   console.log(`\nWrote ${envPath}.`);
-  console.log('Add one label per repository on the board, then start with: pnpm start');
+  console.log('Add one label per repository on the board, then start the daemon with: fiesta start');
+  console.log('herdr must be running before the daemon starts, and neither survives an Unraid reboot');
+  console.log('on its own — start both from a user script if you want them back after a restart.');
 }
 
 main().catch((error: unknown) => {

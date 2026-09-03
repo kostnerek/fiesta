@@ -2,12 +2,13 @@
   "name": "fiesta",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
   "type": "module",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "test": "vitest run",
-    "setup": "tsx --env-file-if-exists=.env src/setup.ts",
-    "start": "tsx --env-file-if-exists=.env src/main.ts"
+    "setup": "tsx src/cli.ts setup",
+    "start": "tsx src/cli.ts start"
   },
   "keywords": [],
   "author": "",
@@ -22,5 +23,16 @@
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
+  },
+  "bin": {
+    "fiesta": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "docker",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=22"
   }
 }
