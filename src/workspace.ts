@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { access, chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
+import type { RepoSource } from './repo-source.js';
 import type { Ticket } from './ticket.js';
 
 const execFileAsync = promisify(execFile);
@@ -68,22 +69,41 @@ function tokenCredentials(token: string): {
   };
 }
 
+export function mirrorPathFor(root: string, source: RepoSource): string {
+  return join(root, 'repos', source.owner, source.repo);
+}
+
 export async function ensureMirror(params: {
   root: string;
-  owner: string;
-  repo: string;
+  source: RepoSource;
   token: string;
 }): Promise<string> {
-  const mirrorPath = join(params.root, 'repos', params.repo);
-  const remote = `https://github.com/${params.owner}/${params.repo}.git`;
+  const mirrorPath = mirrorPathFor(params.root, params.source);
+  await mkdir(join(params.root, 'repos', params.source.owner), { recursive: true });
+
+  if (params.source.localPath) {
+    if (!(await exists(mirrorPath))) {
+      await git(['clone', '--mirror', params.source.localPath, mirrorPath]);
+    }
+    await git([
+      '-C',
+      mirrorPath,
+      'fetch',
+      params.source.localPath,
+      '+refs/heads/*:refs/heads/*',
+      '+refs/remotes/origin/*:refs/heads/*',
+    ]);
+    return mirrorPath;
+  }
+
   const { env, secrets } = tokenCredentials(params.token);
+  const remote = remoteUrl(params.source.owner, params.source.repo);
 
   if (await exists(mirrorPath)) {
     await git(['-C', mirrorPath, 'fetch', '--prune', 'origin'], { env, secrets });
     return mirrorPath;
   }
 
-  await mkdir(join(params.root, 'repos'), { recursive: true });
   await git(['clone', '--mirror', remote, mirrorPath], { env, secrets });
   return mirrorPath;
 }
@@ -99,11 +119,10 @@ export function workspaceRoot(root: string, shortLink: string): string {
 export async function prepareWorkspace(params: {
   root: string;
   mirrorPath: string;
-  owner: string;
-  repo: string;
+  source: RepoSource;
   ticket: Ticket;
 }): Promise<string> {
-  const checkoutPath = join(workspaceRoot(params.root, params.ticket.shortLink), params.repo);
+  const checkoutPath = join(workspaceRoot(params.root, params.ticket.shortLink), params.source.dir);
   if (await exists(checkoutPath)) {
     return checkoutPath;
   }
@@ -118,7 +137,14 @@ export async function prepareWorkspace(params: {
     params.ticket.branch,
     `origin/${params.ticket.baseBranch}`,
   ]);
-  await git(['-C', checkoutPath, 'remote', 'set-url', 'origin', remoteUrl(params.owner, params.repo)]);
+  await git([
+    '-C',
+    checkoutPath,
+    'remote',
+    'set-url',
+    'origin',
+    remoteUrl(params.source.owner, params.source.repo),
+  ]);
   return checkoutPath;
 }
 
@@ -130,7 +156,7 @@ export async function writeAgentEnvFile(params: {
   root: string;
   owner: string;
   token: string;
-  repos: string[];
+  sources: RepoSource[];
   ticket: Ticket;
 }): Promise<string> {
   const path = agentEnvPath(params.root, params.ticket.shortLink);
@@ -138,7 +164,7 @@ export async function writeAgentEnvFile(params: {
     `GITHUB_TOKEN=${params.token}`,
     `GITHUB_OWNER=${params.owner}`,
     `FIESTA_PROJECT=${params.ticket.project}`,
-    `FIESTA_REPOS=${params.repos.join(',')}`,
+    `FIESTA_REPOS=${params.sources.map((source) => `${source.owner}/${source.repo}`).join(',')}`,
     `FIESTA_BASE_BRANCH=${params.ticket.baseBranch}`,
     '',
   ].join('\n');

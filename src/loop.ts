@@ -4,6 +4,7 @@ import type { ActiveTicket, Escalator } from './escalator.js';
 import type { GitHubClient } from './github.js';
 import type { Marker } from './markers.js';
 import type { readProjects, resolveProject } from './projects.js';
+import type { resolveRepoSource } from './repo-source.js';
 import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TelegramClient } from './telegram.js';
@@ -44,7 +45,11 @@ export class Loop {
       trello: TrelloClient;
       herdr: HerdrClient;
       github: GitHubClient;
-      projects: { readProjects: typeof readProjects; resolveProject: typeof resolveProject };
+      projects: {
+        readProjects: typeof readProjects;
+        resolveProject: typeof resolveProject;
+        resolveRepoSource: typeof resolveRepoSource;
+      };
       dispatcher: Dispatcher;
       escalator: Escalator;
       telegram: TelegramClient;
@@ -227,13 +232,14 @@ export class Loop {
           continue;
         }
 
-        const repos = this.deps.projects.resolveProject(
+        const entries = this.deps.projects.resolveProject(
           await this.deps.projects.readProjects(config.paths.root),
           ticket.project,
         );
         const found = [];
-        for (const repo of repos) {
-          const pr = await github.findPrByBranch(repo, ticket.branch);
+        for (const entry of entries) {
+          const source = await this.deps.projects.resolveRepoSource(entry, config.github.owner);
+          const pr = await github.findPrByBranch(source.owner, source.repo, ticket.branch);
           if (pr) {
             found.push(pr);
           }

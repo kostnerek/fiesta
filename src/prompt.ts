@@ -1,7 +1,10 @@
+import type { RepoSource } from './repo-source.js';
 import type { Ticket } from './ticket.js';
 
-export function buildPrompt(ticket: Ticket, owner: string, repos: string[]): string {
-  const checkouts = repos.map((repo) => `  /workspace/${repo}  ->  github.com/${owner}/${repo}`);
+export function buildPrompt(ticket: Ticket, owner: string, sources: RepoSource[]): string {
+  const checkouts = sources.map(
+    (source) => `  /workspace/${source.dir}  ->  github.com/${source.owner}/${source.repo}`,
+  );
 
   return [
     'Use the orchestrate-ticket skill to deliver this ticket end to end.',
@@ -27,7 +30,8 @@ export function buildPrompt(ticket: Ticket, owner: string, repos: string[]): str
     '  use the GitHub REST API with curl and jq, as described in the orchestrate-ticket skill.',
     '- End your turn listing every PR URL you opened.',
     `- GITHUB_OWNER (${owner}), FIESTA_PROJECT (${ticket.project}), FIESTA_REPOS`,
-    `  (${repos.join(',')}) and FIESTA_BASE_BRANCH (${ticket.baseBranch}) are set in your`,
+    `  (${sources.map((source) => `${source.owner}/${source.repo}`).join(',')}) and`,
+    `  FIESTA_BASE_BRANCH (${ticket.baseBranch}) are set in your`,
     '  environment, alongside GITHUB_TOKEN.',
   ].join('\n');
 }

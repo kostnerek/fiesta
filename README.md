@@ -140,17 +140,36 @@ a repository. A project is one or more repositories, checked out together, so a
 single card can change several of them:
 
 ```bash
-fiesta project add tsoft platform platform-frontend backoffice
+fiesta project                             # interactive: name it, then tick repositories
 fiesta project list
-fiesta project remove tsoft backoffice     # or omit repos to drop the project
+fiesta project add tsoft /mnt/user/repos/platform /mnt/user/repos/backoffice
+fiesta project remove tsoft backoffice     # or omit entries to drop the project
 ```
 
-`add` does three things, and the second and third are why it exists rather than
-you editing a file: it records the mapping in `<FIESTA_ROOT>/projects.json`,
-**verifies every repository actually exists** on GitHub, and **creates the
-matching label on the board**. Both of those catch a typo now instead of at
-2 a.m. on the first ticket — a label that does not match the project name
-exactly produces a card the daemon rejects, with no obvious reason why.
+Run `fiesta project` with no arguments and it asks for a name, scans a directory
+you choose for git repositories (recursively, so `~/repos/tsoft/platform` is
+found), and gives you a checkbox list showing where each one pushes. You can scan
+more than one directory before saving.
+
+An entry is either **a path to a clone already on this machine** — preferred —
+or a GitHub reference (`owner/repo`, or a bare `repo` for your own account).
+
+With a path, fiesta copies from your clone instead of downloading the repository
+again, and reads its `origin` to learn where to push and open PRs — so a repo
+under an organisation just works, with no owner to configure. **Your checkout is
+only ever read from.** Agents work in a per-ticket copy; an autonomous agent
+running `git checkout -B` in a directory you also use would clobber your
+uncommitted work and two tickets would fight over one directory.
+
+Whichever form you use, `add` also **verifies the repository is real** (an
+existing clone with an `origin`, or a repository that exists on GitHub) and
+**creates the matching board label**. Both catch a typo now instead of at 2 a.m.
+on the first ticket — a label that does not match the project name exactly
+produces a card the daemon rejects with no obvious reason why.
+
+A repository whose clone is out of date gives the agent an out-of-date starting
+point; fiesta does not run `fetch` in your checkout, because that is your
+directory to manage.
 
 A project of one repository is not a special case; it is the same code path.
 

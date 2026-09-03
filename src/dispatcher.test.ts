@@ -29,6 +29,12 @@ function build() {
   const projects = {
     readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
     resolveProject: vi.fn().mockReturnValue(['demo']),
+    resolveRepoSource: vi.fn(async (entry: string, owner: string) => ({
+      dir: entry,
+      owner,
+      repo: entry,
+      localPath: null,
+    })),
   };
   const dispatcher = new Dispatcher({
     trello: trello as never,
@@ -68,7 +74,7 @@ describe('Dispatcher.claimAndStart', () => {
     await dispatcher.claimAndStart(makeCard());
 
     expect(git.prepareWorkspace).toHaveBeenCalledWith(
-      expect.objectContaining({ owner: 'kostnerek' }),
+      expect.objectContaining({ source: expect.objectContaining({ owner: 'kostnerek' }) }),
     );
     expect(git.writeAgentEnvFile).toHaveBeenCalledWith(
       expect.objectContaining({ owner: 'kostnerek', token: 'gh-secret-token' }),
@@ -99,10 +105,11 @@ describe('Dispatcher across several repositories', () => {
 
     expect(git.ensureMirror).toHaveBeenCalledTimes(2);
     expect(git.prepareWorkspace).toHaveBeenCalledTimes(2);
-    expect(git.prepareWorkspace.mock.calls.map(([params]) => (params as { repo: string }).repo)).toEqual([
-      'platform',
-      'backoffice',
-    ]);
+    expect(
+      git.prepareWorkspace.mock.calls.map(
+        ([params]) => (params as { source: { repo: string } }).source.repo,
+      ),
+    ).toEqual(['platform', 'backoffice']);
   });
 
   it('mounts the shared workspace root, not one repository', async () => {

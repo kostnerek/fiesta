@@ -9,8 +9,22 @@ async function build(overrides: Partial<ProjectCommandDeps> = {}) {
   const lines: string[] = [];
   const deps: ProjectCommandDeps = {
     root: await mkdtemp(join(tmpdir(), 'fiesta-project-cmd-')),
+    defaultOwner: 'kostnerek',
+    resolveRepoSource: vi.fn(async (entry: string, owner: string) => ({
+      dir: entry.split('/').pop() ?? entry,
+      owner: entry.includes('/') && !entry.startsWith('/') ? (entry.split('/')[0] as string) : owner,
+      repo: entry.split('/').pop() ?? entry,
+      localPath: entry.startsWith('/') ? entry : null,
+    })),
+    findGitRepos: vi.fn().mockResolvedValue([]),
     repoExists: vi.fn().mockResolvedValue(true),
     ensureLabel: vi.fn().mockResolvedValue(true),
+    prompts: {
+      projectName: vi.fn().mockResolvedValue('tsoft'),
+      scanDirectory: vi.fn().mockResolvedValue('/repos'),
+      pickRepos: vi.fn().mockResolvedValue([]),
+      scanAgain: vi.fn().mockResolvedValue(false),
+    },
     log: (line: string) => lines.push(line),
     ...overrides,
   };
@@ -32,18 +46,18 @@ describe('fiesta project add', () => {
   it('says so when the label was already there', async () => {
     const { deps, output } = await build({ ensureLabel: vi.fn().mockResolvedValue(false) });
     await runProjectCommand(['add', 'tsoft', 'platform'], deps);
-    expect(output()).toMatch(/already exists on the board/);
+    expect(output()).toMatch(/already exists/);
   });
 
   it('changes nothing when a repository does not exist', async () => {
     const { deps, output } = await build({
-      repoExists: vi.fn(async (repo: string) => repo !== 'typo'),
+      repoExists: vi.fn(async (_owner: string, repo: string) => repo !== 'typo'),
     });
 
     const code = await runProjectCommand(['add', 'tsoft', 'platform', 'typo'], deps);
 
     expect(code).toBe(1);
-    expect(output()).toMatch(/No such repository: typo/);
+    expect(output()).toMatch(/No such repository on GitHub: kostnerek\/typo/);
     await expect(readProjects(deps.root)).resolves.toEqual({});
     expect(deps.ensureLabel).not.toHaveBeenCalled();
   });
@@ -55,9 +69,10 @@ describe('fiesta project add', () => {
     await expect(readProjects(deps.root)).resolves.toEqual({ tsoft: ['backoffice', 'platform'] });
   });
 
-  it('rejects an add with no repositories', async () => {
+  it('falls back to the wizard when add names no repositories', async () => {
     const { deps } = await build();
     expect(await runProjectCommand(['add', 'tsoft'], deps)).toBe(1);
+    expect(deps.prompts.projectName).toHaveBeenCalled();
   });
 });
 
@@ -105,5 +120,83 @@ describe('fiesta project (no subcommand)', () => {
     const { deps, output } = await build();
     expect(await runProjectCommand(['wat'], deps)).toBe(1);
     expect(output()).toMatch(/fiesta project add/);
+  });
+});
+
+describe('fiesta project (interactive)', () => {
+  it('asks for a name, scans, and saves what was ticked', async () => {
+    const { deps, output } = await build({
+      findGitRepos: vi.fn().mockResolvedValue(['/repos/tsoft/platform', '/repos/tsoft/web']),
+      prompts: {
+        projectName: vi.fn().mockResolvedValue('tsoft'),
+        scanDirectory: vi.fn().mockResolvedValue('/repos'),
+        pickRepos: vi.fn().mockResolvedValue(['/repos/tsoft/platform']),
+        scanAgain: vi.fn().mockResolvedValue(false),
+      },
+    });
+
+    expect(await runProjectCommand([], deps)).toBe(0);
+    await expect(readProjects(deps.root)).resolves.toEqual({ tsoft: ['/repos/tsoft/platform'] });
+    expect(deps.ensureLabel).toHaveBeenCalledWith('tsoft');
+    expect(output()).toMatch(/\(local\)/);
+  });
+
+  it('accumulates picks across several directories', async () => {
+    const scanAgain = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false);
+    const { deps } = await build({
+      findGitRepos: vi
+        .fn()
+        .mockResolvedValueOnce(['/a/platform'])
+        .mockResolvedValueOnce(['/b/web']),
+      prompts: {
+        projectName: vi.fn().mockResolvedValue('tsoft'),
+        scanDirectory: vi.fn().mockResolvedValueOnce('/a').mockResolvedValue('/b'),
+        pickRepos: vi.fn(async (found: { path: string }[]) => found.map((entry) => entry.path)),
+        scanAgain,
+      },
+    });
+
+    expect(await runProjectCommand([], deps)).toBe(0);
+    await expect(readProjects(deps.root)).resolves.toEqual({ tsoft: ['/a/platform', '/b/web'] });
+  });
+
+  it('saves nothing when the user ticks nothing', async () => {
+    const { deps, output } = await build({
+      findGitRepos: vi.fn().mockResolvedValue(['/repos/platform']),
+    });
+
+    expect(await runProjectCommand([], deps)).toBe(1);
+    expect(output()).toMatch(/Nothing selected/);
+    await expect(readProjects(deps.root)).resolves.toEqual({});
+  });
+
+  it('refuses two repositories that would share one workspace directory', async () => {
+    const { deps, output } = await build({
+      findGitRepos: vi.fn().mockResolvedValue(['/a/platform', '/b/platform']),
+      prompts: {
+        projectName: vi.fn().mockResolvedValue('tsoft'),
+        scanDirectory: vi.fn().mockResolvedValue('/'),
+        pickRepos: vi.fn().mockResolvedValue(['/a/platform', '/b/platform']),
+        scanAgain: vi.fn().mockResolvedValue(false),
+      },
+    });
+
+    expect(await runProjectCommand([], deps)).toBe(1);
+    expect(output()).toMatch(/would both be checked out as "platform"/);
+    await expect(readProjects(deps.root)).resolves.toEqual({});
+  });
+
+  it('rejects an empty project name', async () => {
+    const { deps, output } = await build({
+      prompts: {
+        projectName: vi.fn().mockResolvedValue('   '),
+        scanDirectory: vi.fn(),
+        pickRepos: vi.fn(),
+        scanAgain: vi.fn(),
+      },
+    });
+
+    expect(await runProjectCommand([], deps)).toBe(1);
+    expect(output()).toMatch(/needs a name/);
   });
 });

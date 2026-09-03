@@ -2,6 +2,7 @@ import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
 import { buildAgentCommand, buildPrompt } from './prompt.js';
 import { readProjects, resolveProject } from './projects.js';
+import type { resolveRepoSource } from './repo-source.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TrelloClient } from './trello.js';
 import type {
@@ -21,6 +22,7 @@ type GitOperations = {
 type ProjectOperations = {
   readProjects: typeof readProjects;
   resolveProject: typeof resolveProject;
+  resolveRepoSource: typeof resolveRepoSource;
 };
 
 export class Dispatcher {
@@ -38,10 +40,16 @@ export class Dispatcher {
     const { trello, herdr, git, projects, config } = this.deps;
 
     let ticket: Ticket;
-    let repos: string[];
+    let sources;
     try {
       ticket = toTicket(card);
-      repos = projects.resolveProject(await projects.readProjects(config.paths.root), ticket.project);
+      const entries = projects.resolveProject(
+        await projects.readProjects(config.paths.root),
+        ticket.project,
+      );
+      sources = await Promise.all(
+        entries.map((entry) => projects.resolveRepoSource(entry, config.github.owner)),
+      );
     } catch (error) {
       if (!(error instanceof TicketError)) {
         throw error;
@@ -53,20 +61,13 @@ export class Dispatcher {
 
     await trello.moveCard(card.id, config.trello.lists.inProgress);
 
-    for (const repo of repos) {
+    for (const source of sources) {
       const mirrorPath = await git.ensureMirror({
         root: config.paths.root,
-        owner: config.github.owner,
-        repo,
+        source,
         token: config.github.token,
       });
-      await git.prepareWorkspace({
-        root: config.paths.root,
-        mirrorPath,
-        owner: config.github.owner,
-        repo,
-        ticket,
-      });
+      await git.prepareWorkspace({ root: config.paths.root, mirrorPath, source, ticket });
     }
 
     const workspacePath = git.workspaceRoot(config.paths.root, ticket.shortLink);
@@ -74,7 +75,7 @@ export class Dispatcher {
       root: config.paths.root,
       owner: config.github.owner,
       token: config.github.token,
-      repos,
+      sources,
       ticket,
     });
 
@@ -86,13 +87,13 @@ export class Dispatcher {
         workspacePath,
         claudeCredentials: config.paths.claudeCredentials,
         envFilePath,
-        prompt: buildPrompt(ticket, config.github.owner, repos),
+        prompt: buildPrompt(ticket, config.github.owner, sources),
       }),
     });
 
     await trello.addComment(
       card.id,
-      `🤖 Started on branch \`${ticket.branch}\` in ${repos.join(', ')} (workspace ${workspace.id}).`,
+      `🤖 Started on branch \`${ticket.branch}\` in ${sources.map((source) => source.repo).join(', ')} (workspace ${workspace.id}).`,
     );
   }
 }

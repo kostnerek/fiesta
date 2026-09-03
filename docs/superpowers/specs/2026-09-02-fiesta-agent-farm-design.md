@@ -164,8 +164,19 @@ przeniesienie karty z powrotem do `Ready`.
 Label na karcie nazywa projekt, nie repozytorium. Mapowanie żyje w `<root>/projects.json`:
 
 ```json
-{ "tsoft": ["platform", "platform-frontend", "backoffice"], "fiesta": ["fiesta"] }
+{
+  "tsoft": ["/mnt/user/repos/platform", "/mnt/user/repos/backoffice"],
+  "fiesta": ["fiesta"]
+}
 ```
+
+Wpis to **ścieżka do klonu już obecnego na maszynie** (preferowana) albo referencja
+GitHuba (`owner/repo`, lub sama nazwa dla domyślnego ownera). Przy ścieżce fiesta
+kopiuje z twojego klonu zamiast ściągać repo ponownie i czyta z niego `origin`, żeby
+wiedzieć dokąd pushować — więc repo pod organizacją działa bez konfigurowania ownera.
+**Twój checkout jest wyłącznie czytany**: agent pracuje na kopii per ticket, bo
+`git checkout -B` w katalogu, którego ty też używasz, skasowałby twoje niezacommitowane
+zmiany, a dwa tickety biłyby się o ten sam katalog.
 
 To konfiguracja, nie stan ticketów, więc nie łamie zasady „stan żyje na boardzie". Zarządza
 się nią komendami `fiesta project list|add|remove`; `add` weryfikuje, że każde repo istnieje

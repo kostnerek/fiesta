@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentCommand, buildPrompt } from './prompt.js';
+import type { RepoSource } from './repo-source.js';
+
+function src(repo: string, owner = 'kostnerek'): RepoSource {
+  return { dir: repo, owner, repo, localPath: null };
+}
 import type { Ticket } from './ticket.js';
 
 function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
@@ -17,7 +22,7 @@ function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
 
 describe('buildPrompt', () => {
   it('includes the project, base branch, working branch, title and description', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('demo')]);
 
     expect(prompt).toContain('Project: demo');
     expect(prompt).toContain('Base branch: main');
@@ -27,7 +32,7 @@ describe('buildPrompt', () => {
   });
 
   it('tells the agent how to push and open the PR without a gh CLI', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('demo')]);
 
     expect(prompt).toContain('git push -u origin HEAD');
     expect(prompt).toMatch(/no gh CLI/i);
@@ -42,7 +47,7 @@ describe('buildAgentCommand', () => {
       workspacePath: '/root/work/aBcD1234',
       claudeCredentials: '/creds',
       envFilePath: '/root/env/aBcD1234.env',
-      prompt: buildPrompt(makeTicket(), 'kostnerek', ['demo']),
+      prompt: buildPrompt(makeTicket(), 'kostnerek', [src('demo')]),
       ...overrides,
     });
   }
@@ -69,7 +74,7 @@ describe('buildAgentCommand', () => {
   });
 
   it('carries the prompt as base64 in FIESTA_PROMPT_B64 and it decodes back to buildPrompt output', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['demo']);
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('demo')]);
     const command = build({ prompt });
 
     const match = /FIESTA_PROMPT_B64=(\S+)/.exec(command);
@@ -81,7 +86,7 @@ describe('buildAgentCommand', () => {
 
 describe('buildPrompt across several repositories', () => {
   it('lists a checkout path per repository of the project', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['platform', 'backoffice']);
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('platform'), src('backoffice')]);
 
     expect(prompt).toContain('/workspace/platform  ->  github.com/kostnerek/platform');
     expect(prompt).toContain('/workspace/backoffice  ->  github.com/kostnerek/backoffice');
@@ -89,7 +94,7 @@ describe('buildPrompt across several repositories', () => {
   });
 
   it('tells the agent that leaving a repository untouched is normal', () => {
-    const prompt = buildPrompt(makeTicket(), 'kostnerek', ['platform', 'backoffice']);
+    const prompt = buildPrompt(makeTicket(), 'kostnerek', [src('platform'), src('backoffice')]);
 
     expect(prompt).toMatch(/Leaving one untouched is/);
     expect(prompt).toMatch(/one draft PR per changed repository/i);

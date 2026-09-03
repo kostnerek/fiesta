@@ -31,9 +31,9 @@ export class GitHubClient {
     return (await response.json()) as T;
   }
 
-  async repoExists(repo: string): Promise<boolean> {
+  async repoExists(owner: string, repo: string): Promise<boolean> {
     const response = await this.fetchImpl(
-      `https://api.github.com/repos/${this.credentials.owner}/${repo}`,
+      `https://api.github.com/repos/${owner}/${repo}`,
       {
         headers: {
           authorization: `Bearer ${this.credentials.token}`,
@@ -45,7 +45,7 @@ export class GitHubClient {
       return false;
     }
     if (!response.ok) {
-      throw new Error(`GitHub GET /repos/${this.credentials.owner}/${repo} failed: ${response.status}`);
+      throw new Error(`GitHub GET /repos/${owner}/${repo} failed: ${response.status}`);
     }
     return true;
   }
@@ -54,13 +54,13 @@ export class GitHubClient {
     return this.request('/user');
   }
 
-  async findPrByBranch(repo: string, branch: string): Promise<PullRequest | null> {
+  async findPrByBranch(owner: string, repo: string, branch: string): Promise<PullRequest | null> {
     const query = new URLSearchParams({
-      head: `${this.credentials.owner}:${branch}`,
+      head: `${owner}:${branch}`,
       state: 'all',
     });
     const payloads = await this.request<PullRequestPayload[]>(
-      `/repos/${this.credentials.owner}/${repo}/pulls?${query.toString()}`,
+      `/repos/${owner}/${repo}/pulls?${query.toString()}`,
     );
     const payload = payloads[0];
     return payload ? toPullRequest(payload) : null;

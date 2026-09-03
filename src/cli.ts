@@ -23,14 +23,23 @@ async function runProject(args: string[]): Promise<number> {
   const { GitHubClient } = await import('./github.js');
   const { TrelloClient } = await import('./trello.js');
   const { runProjectCommand } = await import('./project-command.js');
+  const { findGitRepos, resolveRepoSource } = await import('./repo-source.js');
+  const { checkbox, confirm, input } = await import('@inquirer/prompts');
+  const { homedir } = await import('node:os');
+  const { join } = await import('node:path');
 
   const config = loadConfig(process.env);
   const github = new GitHubClient({ token: config.github.token, owner: config.github.owner });
   const trello = new TrelloClient({ key: config.trello.key, token: config.trello.token });
 
+  let lastScanned = join(homedir(), 'repos');
+
   return runProjectCommand(args, {
     root: config.paths.root,
-    repoExists: (repo) => github.repoExists(repo),
+    defaultOwner: config.github.owner,
+    resolveRepoSource,
+    findGitRepos: (directory) => findGitRepos(directory),
+    repoExists: (owner, repo) => github.repoExists(owner, repo),
     ensureLabel: async (name) => {
       const existing = await trello.labels(config.trello.boardId);
       if (existing.some((label) => label.name.toLowerCase() === name.toLowerCase())) {
@@ -38,6 +47,20 @@ async function runProject(args: string[]): Promise<number> {
       }
       await trello.createLabel(config.trello.boardId, name);
       return true;
+    },
+    prompts: {
+      projectName: () => input({ message: 'Project name (this becomes the board label):' }),
+      scanDirectory: async () => {
+        lastScanned = await input({ message: 'Scan which directory for repositories?', default: lastScanned });
+        return lastScanned;
+      },
+      pickRepos: (found) =>
+        checkbox({
+          message: 'Which repositories belong to this project?',
+          choices: found.map((entry) => ({ name: entry.label, value: entry.path })),
+          pageSize: 20,
+        }),
+      scanAgain: () => confirm({ message: 'Scan another directory?', default: false }),
     },
     log: (line) => console.log(line),
   });

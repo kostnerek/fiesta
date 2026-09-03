@@ -15,7 +15,7 @@ describe('GitHubClient', () => {
       .mockResolvedValue(jsonResponse([{ number: 7, html_url: 'https://pr/7', merged_at: '2026-09-02T10:00:00Z' }]));
     const client = new GitHubClient({ token: 'gh', owner: 'kostnerek' }, fetchMock);
 
-    const pr = await client.findPrByBranch('demo', 'fiesta/aBcD1234-add-hello-file');
+    const pr = await client.findPrByBranch('kostnerek', 'demo', 'fiesta/aBcD1234-add-hello-file');
 
     expect(pr).toEqual({ number: 7, url: 'https://pr/7', merged: true });
     const url = new URL(fetchMock.mock.calls[0]![0] as string);
@@ -26,6 +26,6 @@ describe('GitHubClient', () => {
   it('returns null when the branch has no pull request', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     const client = new GitHubClient({ token: 'gh', owner: 'kostnerek' }, fetchMock);
-    await expect(client.findPrByBranch('demo', 'nope')).resolves.toBeNull();
+    await expect(client.findPrByBranch('kostnerek', 'demo', 'nope')).resolves.toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { GitHubClient } from './github.js';
 import { HerdrClient } from './herdr.js';
 import { Loop } from './loop.js';
 import { readProjects, resolveProject } from './projects.js';
+import { resolveRepoSource } from './repo-source.js';
 import { TelegramClient } from './telegram.js';
 import { TrelloClient } from './trello.js';
 import {
@@ -26,12 +27,12 @@ const loop = new Loop({
   trello,
   herdr,
   github,
-  projects: { readProjects, resolveProject },
+  projects: { readProjects, resolveProject, resolveRepoSource },
   dispatcher: new Dispatcher({
     trello,
     herdr,
     git: { ensureMirror, prepareWorkspace, writeAgentEnvFile, workspaceRoot },
-    projects: { readProjects, resolveProject },
+    projects: { readProjects, resolveProject, resolveRepoSource },
     config,
   }),
   escalator: new Escalator({ herdr, telegram, trello, config }),

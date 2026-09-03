@@ -48,6 +48,12 @@ function build(
   const projects = {
     readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
     resolveProject: vi.fn().mockReturnValue(['demo']),
+    resolveRepoSource: vi.fn(async (entry: string, owner: string) => ({
+      dir: entry,
+      owner,
+      repo: entry,
+      localPath: null,
+    })),
   };
   const loop = new Loop({
     trello: trello as never,
@@ -70,6 +76,7 @@ function build(
           done: 'list-done',
         },
       },
+      github: { owner: 'kostnerek', token: 'gh' },
       limits: { maxActive: 1 },
       paths: { root: '/root' },
     } as never,
@@ -341,7 +348,7 @@ describe('Loop.closeMerged across several repositories', () => {
   it('waits until every pull request the agent opened is merged', async () => {
     const { loop, trello, github, projects } = build({ review: [makeCard()] });
     projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
-    github.findPrByBranch.mockImplementation(async (repo: string) =>
+    github.findPrByBranch.mockImplementation(async (_owner: string, repo: string) =>
       repo === 'platform'
         ? { number: 7, url: 'https://pr/7', merged: true }
         : { number: 8, url: 'https://pr/8', merged: false },
@@ -356,7 +363,7 @@ describe('Loop.closeMerged across several repositories', () => {
     const { loop, trello, github, projects, herdr } = build({ review: [makeCard()] });
     projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
     herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
-    github.findPrByBranch.mockImplementation(async (repo: string) => ({
+    github.findPrByBranch.mockImplementation(async (_owner: string, repo: string) => ({
       number: repo === 'platform' ? 7 : 8,
       url: `https://pr/${repo}`,
       merged: true,
@@ -375,7 +382,7 @@ describe('Loop.closeMerged across several repositories', () => {
     const { loop, trello, github, projects, herdr } = build({ review: [makeCard()] });
     projects.resolveProject.mockReturnValue(['platform', 'backoffice']);
     herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
-    github.findPrByBranch.mockImplementation(async (repo: string) =>
+    github.findPrByBranch.mockImplementation(async (_owner: string, repo: string) =>
       repo === 'platform' ? { number: 7, url: 'https://pr/7', merged: true } : null,
     );
 
