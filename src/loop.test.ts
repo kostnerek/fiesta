@@ -37,9 +37,13 @@ function build(
     findWorkspaceByLabel: vi.fn().mockResolvedValue(null),
     firstPaneId: vi.fn().mockResolvedValue('pane-1'),
     killWorkspace: vi.fn(),
+    sendText: vi.fn(),
   };
   const dispatcher = { claimAndStart: vi.fn() };
-  const github = { findPrByBranch: vi.fn().mockResolvedValue(null) };
+  const github = {
+    findPrByBranch: vi.fn().mockResolvedValue(null),
+    listPrComments: vi.fn().mockResolvedValue([]),
+  };
   const escalator = {
     inspect: vi.fn().mockResolvedValue({ outcome: 'running', marker: null }),
     deliverReplies: vi.fn(),
@@ -398,5 +402,87 @@ describe('Loop.closeMerged across several repositories', () => {
     await loop.tick();
 
     expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', 'list-done');
+  });
+});
+
+describe('Loop review feedback', () => {
+  function reviewing(overrides: { comments?: unknown[] } = {}) {
+    const built = build({ review: [makeCard()] });
+    built.projects.resolveProject.mockReturnValue(['platform']);
+    built.github.findPrByBranch.mockResolvedValue({ number: 7, url: 'https://pr/7', merged: false });
+    built.herdr.findWorkspaceByLabel.mockResolvedValue({ id: 'ws-1', label: 'aBcD1234' });
+    built.github.listPrComments.mockResolvedValue(overrides.comments ?? []);
+    return built;
+  }
+
+  it('does not replay comments that were already there when it first looked', async () => {
+    const { loop, herdr } = reviewing({
+      comments: [{ id: 5, author: 'ola', body: 'old note', path: null, line: null }],
+    });
+
+    await loop.tick();
+
+    expect(herdr.sendText).not.toHaveBeenCalled();
+  });
+
+  it('delivers a comment left after it started watching', async () => {
+    const { loop, herdr, github } = reviewing({ comments: [] });
+    await loop.tick();
+
+    github.listPrComments.mockResolvedValue([
+      { id: 9, author: 'ola', body: 'rename this', path: 'src/a.ts', line: 3 },
+    ]);
+    await loop.tick();
+
+    expect(herdr.sendText).toHaveBeenCalledTimes(1);
+    expect(herdr.sendText.mock.calls[0]![1]).toContain('- ola on src/a.ts:3: rename this');
+  });
+
+  it('delivers each comment once, not on every tick', async () => {
+    const { loop, herdr, github } = reviewing({ comments: [] });
+    await loop.tick();
+    github.listPrComments.mockResolvedValue([
+      { id: 9, author: 'ola', body: 'rename this', path: null, line: null },
+    ]);
+    await loop.tick();
+    await loop.tick();
+
+    expect(herdr.sendText).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores the agent answering itself on the pull request', async () => {
+    const { loop, herdr, github } = reviewing({ comments: [] });
+    await loop.tick();
+    github.listPrComments.mockResolvedValue([
+      { id: 9, author: 'kostnerek', body: 'pushed a fix', path: null, line: null },
+    ]);
+    await loop.tick();
+
+    expect(herdr.sendText).not.toHaveBeenCalled();
+  });
+
+  it('says so rather than losing feedback when the session is gone', async () => {
+    const { loop, herdr, github } = reviewing({ comments: [] });
+    await loop.tick();
+    github.listPrComments.mockResolvedValue([
+      { id: 9, author: 'ola', body: 'rename this', path: null, line: null },
+    ]);
+    herdr.findWorkspaceByLabel.mockResolvedValue(null);
+    await loop.tick();
+
+    expect(herdr.sendText).not.toHaveBeenCalled();
+  });
+
+  it('stops polling once every pull request is merged', async () => {
+    const { loop, trello, github, herdr } = reviewing({ comments: [] });
+    await loop.tick();
+    github.findPrByBranch.mockResolvedValue({ number: 7, url: 'https://pr/7', merged: true });
+    github.listPrComments.mockClear();
+
+    await loop.tick();
+
+    expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-done');
+    expect(github.listPrComments).not.toHaveBeenCalled();
+    expect(herdr.killWorkspace).toHaveBeenCalled();
   });
 });

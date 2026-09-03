@@ -178,6 +178,17 @@ directory to manage.
 
 A project of one repository is not a special case; it is the same code path.
 
+**Review feedback comes back to the agent.** While a card sits in `Review`
+with an unmerged PR, the daemon polls that PR's comments — general and
+inline — and delivers anything new into the still-running agent session,
+with the file and line where it applies. The agent pushes to the same
+branch rather than opening another PR, and is told to reply on the PR
+rather than silently comply when it thinks a comment is wrong. Its own
+comments are ignored, so it cannot talk itself into a loop. Comments that
+existed the first time the daemon saw the card are treated as already
+handled, which means feedback left while the daemon was down is not
+replayed — add a new comment to nudge it.
+
 `/workspace` inside the agent container holds one directory per repository of
 the project, each on the ticket's branch. The agent changes only what the
 ticket needs, opens one draft PR per repository it touched, and the card

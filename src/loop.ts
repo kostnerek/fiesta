@@ -9,6 +9,12 @@ import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TelegramClient } from './telegram.js';
 import type { TrelloClient } from './trello.js';
+import {
+  formatFeedback,
+  highestCommentId,
+  type PrComment,
+  unseenComments,
+} from './review-feedback.js';
 import type { removeWorkspace } from './workspace.js';
 
 const ORPHANED_COMMENT = '🤖 Agent lost (restart or crash) — returning to Ready for a fresh run.';
@@ -38,6 +44,7 @@ export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
   private readonly lastMarker = new Map<string, Marker>();
   private readonly dispatchFailures = new Map<string, number>();
+  private readonly lastCommentId = new Map<string, number | null>();
   private tickFailures = 0;
 
   constructor(
@@ -223,6 +230,43 @@ export class Loop {
     return result;
   }
 
+  private async deliverReviewFeedback(
+    shortLink: string,
+    open: { owner: string; repo: string; number: number; url: string }[],
+  ): Promise<void> {
+    const { herdr, github, config } = this.deps;
+
+    for (const pr of open) {
+      const comments = await github.listPrComments(pr.owner, pr.repo, pr.number);
+      const seen = this.lastCommentId.get(shortLink) ?? null;
+
+      if (!this.lastCommentId.has(shortLink)) {
+        this.lastCommentId.set(shortLink, highestCommentId(comments));
+        continue;
+      }
+
+      const fresh: PrComment[] = unseenComments({
+        comments,
+        lastSeenId: seen,
+        agentLogin: config.github.owner,
+      });
+      if (fresh.length === 0) {
+        continue;
+      }
+
+      const workspace = await herdr.findWorkspaceByLabel(shortLink);
+      if (!workspace) {
+        console.error(
+          `[fiesta] review feedback on ${pr.url} has nowhere to go: no live workspace for ${shortLink}`,
+        );
+        continue;
+      }
+
+      await herdr.sendText(await herdr.firstPaneId(workspace.id), formatFeedback({ prUrl: pr.url, comments: fresh }));
+      this.lastCommentId.set(shortLink, highestCommentId(comments));
+    }
+  }
+
   private async closeMerged(): Promise<void> {
     const { trello, herdr, github, config } = this.deps;
     for (const card of await trello.cardsInList(config.trello.lists.review)) {
@@ -237,14 +281,19 @@ export class Loop {
           ticket.project,
         );
         const found = [];
+        const open: { owner: string; repo: string; number: number; url: string }[] = [];
         for (const entry of entries) {
           const source = await this.deps.projects.resolveRepoSource(entry, config.github.owner);
           const pr = await github.findPrByBranch(source.owner, source.repo, ticket.branch);
           if (pr) {
             found.push(pr);
+            if (!pr.merged) {
+              open.push({ owner: source.owner, repo: source.repo, number: pr.number, url: pr.url });
+            }
           }
         }
-        if (found.length === 0 || found.some((pr) => !pr.merged)) {
+        if (found.length === 0 || open.length > 0) {
+          await this.deliverReviewFeedback(card.shortLink, open);
           continue;
         }
 
@@ -254,6 +303,7 @@ export class Loop {
         if (workspace) {
           await herdr.killWorkspace(workspace.id);
         }
+        this.lastCommentId.delete(card.shortLink);
         await this.deps.removeWorkspace({ root: config.paths.root, shortLink: card.shortLink });
       } catch (error) {
         console.error(`[fiesta] closeMerged: failed to reconcile card ${card.shortLink}`, error);

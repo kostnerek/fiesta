@@ -1,4 +1,14 @@
+import type { PrComment } from './review-feedback.js';
+
 export type PullRequest = { number: number; url: string; merged: boolean };
+
+type RawComment = {
+  id: number;
+  body?: string;
+  user?: { login?: string };
+  path?: string;
+  line?: number | null;
+};
 
 type Credentials = { token: string; owner: string };
 
@@ -48,6 +58,21 @@ export class GitHubClient {
       throw new Error(`GitHub GET /repos/${owner}/${repo} failed: ${response.status}`);
     }
     return true;
+  }
+
+  async listPrComments(owner: string, repo: string, pull: number): Promise<PrComment[]> {
+    const [general, inline] = await Promise.all([
+      this.request<RawComment[]>(`/repos/${owner}/${repo}/issues/${pull}/comments?per_page=100`),
+      this.request<RawComment[]>(`/repos/${owner}/${repo}/pulls/${pull}/comments?per_page=100`),
+    ]);
+
+    return [...general, ...inline].map((raw) => ({
+      id: raw.id,
+      author: raw.user?.login ?? 'unknown',
+      body: raw.body ?? '',
+      path: raw.path ?? null,
+      line: raw.line ?? null,
+    }));
   }
 
   user(): Promise<{ login: string }> {
