@@ -69,10 +69,13 @@ async function main(): Promise<void> {
   console.log(`Authenticated as ${owner}.`);
 
   console.log('\n=== Paths ===');
-  const root = await input({ message: 'Data root:', default: '/mnt/user/appdata/fiesta' });
+  const root = await input({
+    message: 'Data root:',
+    default: process.env.FIESTA_ROOT || '/mnt/user/appdata/fiesta',
+  });
   const claudeCredentials = await input({
     message: 'Claude credentials directory:',
-    default: join(homedir(), '.claude'),
+    default: process.env.CLAUDE_CREDENTIALS_PATH || join(homedir(), '.claude'),
   });
 
   const envPath = join(process.cwd(), '.env');

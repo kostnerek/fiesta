@@ -33,6 +33,27 @@ describe('loadConfig', () => {
     expect(config.limits.pollIntervalMs).toBe(30 * 1000);
   });
 
+  it('treats an empty optional limit as absent instead of zero', () => {
+    const config = loadConfig({
+      ...complete,
+      POLL_INTERVAL_SEC: '',
+      TICKET_TIMEOUT_MIN: '   ',
+      MAX_ACTIVE: '',
+    });
+    expect(config.limits.pollIntervalMs).toBe(30 * 1000);
+    expect(config.limits.ticketTimeoutMs).toBe(60 * 60 * 1000);
+    expect(config.limits.maxActive).toBe(1);
+  });
+
+  it('rejects an unusable limit instead of polling in a hot loop', () => {
+    expect(() => loadConfig({ ...complete, POLL_INTERVAL_SEC: 'soon' })).toThrowError(
+      /POLL_INTERVAL_SEC/,
+    );
+    expect(() => loadConfig({ ...complete, POLL_INTERVAL_SEC: '0' })).toThrowError(
+      /POLL_INTERVAL_SEC/,
+    );
+  });
+
   it('names every missing variable in one error', () => {
     expect(() => loadConfig({ TRELLO_API_KEY: 'k' })).toThrowError(
       /TRELLO_TOKEN.*TELEGRAM_BOT_TOKEN/s,

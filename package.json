@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "vitest run",
-    "setup": "tsx src/setup.ts",
-    "start": "tsx src/main.ts"
+    "setup": "tsx --env-file-if-exists=.env src/setup.ts",
+    "start": "tsx --env-file-if-exists=.env src/main.ts"
   },
   "keywords": [],
   "author": "",

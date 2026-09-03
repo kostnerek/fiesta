@@ -30,6 +30,18 @@ const REQUIRED = [
   'CLAUDE_CREDENTIALS_PATH',
 ];
 
+function positiveNumber(name: string, raw: string | undefined, fallback: number): number {
+  const trimmed = raw?.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid configuration: ${name} must be a positive number, got "${raw}".`);
+  }
+  return value;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
   const missing = REQUIRED.filter((name) => !env[name]);
   if (missing.length > 0) {
@@ -57,9 +69,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
       claudeCredentials: env.CLAUDE_CREDENTIALS_PATH as string,
     },
     limits: {
-      maxActive: Number(env.MAX_ACTIVE ?? 1),
-      ticketTimeoutMs: Number(env.TICKET_TIMEOUT_MIN ?? 60) * 60 * 1000,
-      pollIntervalMs: Number(env.POLL_INTERVAL_SEC ?? 30) * 1000,
+      maxActive: positiveNumber('MAX_ACTIVE', env.MAX_ACTIVE, 1),
+      ticketTimeoutMs: positiveNumber('TICKET_TIMEOUT_MIN', env.TICKET_TIMEOUT_MIN, 60) * 60 * 1000,
+      pollIntervalMs: positiveNumber('POLL_INTERVAL_SEC', env.POLL_INTERVAL_SEC, 30) * 1000,
     },
   };
 }
