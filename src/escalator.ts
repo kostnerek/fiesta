@@ -18,6 +18,8 @@ export type InspectOptions = { since: number | null; lastMarker: Marker | null }
 
 export type InspectResult = { outcome: Outcome; marker: Marker | null };
 
+const TELEGRAM_BACKLOG_PAGE_SIZE = 100;
+
 function isSameMarker(marker: Marker, previous: Marker | null): boolean {
   return previous !== null && previous.kind === marker.kind && previous.text === marker.text;
 }
@@ -78,13 +80,13 @@ export class Escalator {
 
   async deliverReplies(active: Map<string, ActiveTicket>): Promise<void> {
     const { herdr, telegram, trello, config } = this.deps;
-    const updates = await telegram.getUpdates(this.telegramOffset);
 
     if (!this.telegramPrimed) {
-      await this.skipBacklog(updates, active);
+      await this.skipBacklog(active);
       return;
     }
 
+    const updates = await telegram.getUpdates(this.telegramOffset);
     for (const update of updates) {
       const shortLink = update.replyToText ? extractShortLink(update.replyToText) : null;
       try {
@@ -106,13 +108,23 @@ export class Escalator {
     }
   }
 
-  private async skipBacklog(
+  private async skipBacklog(active: Map<string, ActiveTicket>): Promise<void> {
+    const { telegram, trello } = this.deps;
+
+    let page: TelegramUpdate[];
+    do {
+      page = await telegram.getUpdates(this.telegramOffset);
+      await this.skipBacklogPage(page, active, trello);
+    } while (page.length === TELEGRAM_BACKLOG_PAGE_SIZE);
+
+    this.telegramPrimed = true;
+  }
+
+  private async skipBacklogPage(
     updates: TelegramUpdate[],
     active: Map<string, ActiveTicket>,
+    trello: TrelloClient,
   ): Promise<void> {
-    const { trello } = this.deps;
-    this.telegramPrimed = true;
-
     for (const update of updates) {
       this.telegramOffset = Math.max(this.telegramOffset, update.updateId + 1);
       const shortLink = update.replyToText ? extractShortLink(update.replyToText) : null;

@@ -228,6 +228,41 @@ describe('Escalator.deliverReplies', () => {
     expect(telegram.getUpdates).toHaveBeenNthCalledWith(2, 6);
   });
 
+  it('consumes the whole pre-boot backlog before priming, even across multiple pages', async () => {
+    const { escalator, herdr, telegram, trello } = build('');
+    const active = new Map([['aBcD1234', { ticket, paneId: 'pane-1' }]]);
+    const firstPage = Array.from({ length: 100 }, (_, i) => ({
+      updateId: i + 1,
+      chatId: '42',
+      text: `backlog message ${i + 1}`,
+      replyToText: null,
+    }));
+    const secondPage = [
+      {
+        updateId: 101,
+        chatId: '42',
+        text: 'answered hours ago',
+        replyToText: '🤖 [aBcD1234] Add HELLO file',
+      },
+    ];
+    telegram.getUpdates
+      .mockResolvedValueOnce(firstPage)
+      .mockResolvedValueOnce(secondPage)
+      .mockResolvedValueOnce([]);
+
+    await escalator.deliverReplies(active);
+
+    expect(telegram.getUpdates).toHaveBeenCalledTimes(2);
+    expect(telegram.getUpdates).toHaveBeenNthCalledWith(1, 0);
+    expect(telegram.getUpdates).toHaveBeenNthCalledWith(2, 101);
+    expect(herdr.sendText).not.toHaveBeenCalled();
+    expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/resend/i));
+
+    await escalator.deliverReplies(active);
+
+    expect(telegram.getUpdates).toHaveBeenNthCalledWith(3, 102);
+  });
+
   it('delivers replies normally once the backlog has been skipped', async () => {
     const { escalator, herdr, telegram } = build('');
     const active = new Map([['aBcD1234', { ticket, paneId: 'pane-1' }]]);
