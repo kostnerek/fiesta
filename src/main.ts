@@ -6,7 +6,7 @@ import { HerdrClient } from './herdr.js';
 import { Loop } from './loop.js';
 import { TelegramClient } from './telegram.js';
 import { TrelloClient } from './trello.js';
-import { ensureMirror, prepareWorkspace, removeWorkspace } from './workspace.js';
+import { ensureMirror, prepareWorkspace, removeWorkspace, writeAgentEnvFile } from './workspace.js';
 
 const config = loadConfig(process.env);
 
@@ -19,7 +19,12 @@ const loop = new Loop({
   trello,
   herdr,
   github,
-  dispatcher: new Dispatcher({ trello, herdr, git: { ensureMirror, prepareWorkspace }, config }),
+  dispatcher: new Dispatcher({
+    trello,
+    herdr,
+    git: { ensureMirror, prepareWorkspace, writeAgentEnvFile },
+    config,
+  }),
   escalator: new Escalator({ herdr, telegram, trello, config }),
   removeWorkspace,
   config,

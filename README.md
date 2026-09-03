@@ -61,8 +61,8 @@ docker build -t fiesta-agent:latest -f docker/agent.Dockerfile .
 ```
 
 This image contains `git`, `curl`, `jq` and the `claude` CLI, plus an
-`entrypoint.sh` that configures git identity, decodes the base64-encoded
-prompt from `FIESTA_PROMPT_B64`, and launches
+`entrypoint.sh` that configures git identity and a credential helper,
+decodes the base64-encoded prompt from `FIESTA_PROMPT_B64`, and launches
 `claude --dangerously-skip-permissions <prompt>`, and the `orchestrate-ticket`
 / `verify-ticket` skills (from `skills/`) copied to
 `/home/agent/.claude/skills`. The daemon mounts your Claude credentials
@@ -70,6 +70,19 @@ prompt from `FIESTA_PROMPT_B64`, and launches
 `/home/agent/.claude/.credentials.json`; `/home/agent/.claude` itself stays a
 real, writable directory owned by the `agent` user inside the image so that
 mount only overlays the one file.
+
+**How the agent pushes.** The per-ticket checkout has its `origin` repointed
+at `https://github.com/<GITHUB_OWNER>/<repo>.git` (the local mirror it was
+cloned from is a host path the container cannot see). `GITHUB_TOKEN`,
+`GITHUB_OWNER`, `FIESTA_REPO` and `FIESTA_BASE_BRANCH` reach the container
+through `docker run --env-file <root>/env/<shortLink>.env` — a `600` file
+written per ticket and deleted with the workspace — rather than
+`-e NAME=value`, which would put the token in `ps aux` and in herdr's pane
+scrollback for the container's lifetime. The entrypoint turns
+`GITHUB_TOKEN` into a git credential helper, so `git push` needs no further
+setup. There is no `gh` CLI in the image: the agent opens the draft PR
+itself with a `curl`/`jq` REST call, as spelled out in
+`skills/orchestrate-ticket/SKILL.md`.
 
 ## Run the daemon
 

@@ -1,10 +1,16 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect, promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ensureMirror, prepareWorkspace, removeWorkspace } from './workspace.js';
+import {
+  agentEnvPath,
+  ensureMirror,
+  prepareWorkspace,
+  removeWorkspace,
+  writeAgentEnvFile,
+} from './workspace.js';
 import type { Ticket } from './ticket.js';
 
 const run = promisify(execFile);
@@ -73,17 +79,25 @@ afterEach(() => {
 
 describe('prepareWorkspace', () => {
   it('clones the mirror and checks out the ticket branch', async () => {
-    const path = await prepareWorkspace({ root, mirrorPath, ticket });
+    const path = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
 
     expect(await readFile(join(path, 'README.md'), 'utf8')).toBe('demo\n');
     const { stdout } = await run('git', ['-C', path, 'rev-parse', '--abbrev-ref', 'HEAD']);
     expect(stdout.trim()).toBe('fiesta/aBcD1234-add-hello-file');
   });
 
+  it('repoints origin at GitHub so the agent can push from inside the container', async () => {
+    const path = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
+
+    const { stdout } = await run('git', ['-C', path, 'config', '--get', 'remote.origin.url']);
+    expect(stdout.trim()).toBe(`https://github.com/${OWNER}/${REPO}.git`);
+    expect(stdout.trim()).not.toContain(root);
+  });
+
   it('is idempotent — a second call reuses the same checkout', async () => {
-    const first = await prepareWorkspace({ root, mirrorPath, ticket });
+    const first = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
     await writeFile(join(first, 'scratch.txt'), 'kept\n');
-    const second = await prepareWorkspace({ root, mirrorPath, ticket });
+    const second = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
 
     expect(second).toBe(first);
     expect(await readFile(join(second, 'scratch.txt'), 'utf8')).toBe('kept\n');
@@ -97,7 +111,7 @@ describe('prepareWorkspace', () => {
       branch: 'fiesta/devBranch1-add-hello-file',
     };
 
-    const path = await prepareWorkspace({ root, mirrorPath, ticket: developTicket });
+    const path = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket: developTicket });
 
     const { stdout } = await run('git', ['-C', path, 'rev-parse', '--abbrev-ref', 'HEAD']);
     expect(stdout.trim()).toBe('fiesta/devBranch1-add-hello-file');
@@ -122,12 +136,36 @@ describe('ensureMirror', () => {
     const again = await ensureMirror({ root, owner: OWNER, repo: REPO, token: 'unused-token' });
 
     expect(again).toBe(mirrorPath);
-    const path = await prepareWorkspace({ root, mirrorPath, ticket });
+    const path = await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
     expect(await readFile(join(path, 'LATER.md'), 'utf8')).toBe('later\n');
   });
 });
 
+describe('writeAgentEnvFile', () => {
+  it('writes the agent secrets to an owner-only file outside the mounted workspace', async () => {
+    const path = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', ticket });
+
+    expect(path).toBe(agentEnvPath(root, ticket.shortLink));
+    expect(path.startsWith(join(root, 'work'))).toBe(false);
+    const body = await readFile(path, 'utf8');
+    expect(body).toContain('GITHUB_TOKEN=gh-secret');
+    expect(body).toContain(`GITHUB_OWNER=${OWNER}`);
+    expect(body).toContain(`FIESTA_REPO=${REPO}`);
+    expect(body).toContain('FIESTA_BASE_BRANCH=main');
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+  });
+});
+
 describe('removeWorkspace', () => {
+  it('deletes the token-bearing env file along with the checkout', async () => {
+    await prepareWorkspace({ root, mirrorPath, owner: OWNER, ticket });
+    const envPath = await writeAgentEnvFile({ root, owner: OWNER, token: 'gh-secret', ticket });
+
+    await removeWorkspace({ root, shortLink: ticket.shortLink });
+
+    await expect(stat(envPath)).rejects.toThrow();
+  });
+
   it('rejects a shortLink that escapes the work directory', async () => {
     const sentinelDir = join(root, 'sentinel');
     await mkdir(sentinelDir, { recursive: true });

@@ -3,11 +3,12 @@ import type { HerdrClient } from './herdr.js';
 import { buildAgentCommand, buildPrompt } from './prompt.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
 import type { TrelloClient } from './trello.js';
-import type { ensureMirror, prepareWorkspace } from './workspace.js';
+import type { ensureMirror, prepareWorkspace, writeAgentEnvFile } from './workspace.js';
 
 type GitOperations = {
   ensureMirror: typeof ensureMirror;
   prepareWorkspace: typeof prepareWorkspace;
+  writeAgentEnvFile: typeof writeAgentEnvFile;
 };
 
 export class Dispatcher {
@@ -46,7 +47,18 @@ export class Dispatcher {
       repo: ticket.repo,
       token: config.github.token,
     });
-    const workspacePath = await git.prepareWorkspace({ root: config.paths.root, mirrorPath, ticket });
+    const workspacePath = await git.prepareWorkspace({
+      root: config.paths.root,
+      mirrorPath,
+      owner: config.github.owner,
+      ticket,
+    });
+    const envFilePath = await git.writeAgentEnvFile({
+      root: config.paths.root,
+      owner: config.github.owner,
+      token: config.github.token,
+      ticket,
+    });
 
     const workspace = await herdr.createWorkspace(ticket.shortLink, workspacePath);
     await herdr.startAgent({
@@ -55,8 +67,8 @@ export class Dispatcher {
       command: buildAgentCommand({
         workspacePath,
         claudeCredentials: config.paths.claudeCredentials,
-        githubToken: config.github.token,
-        prompt: buildPrompt(ticket),
+        envFilePath,
+        prompt: buildPrompt(ticket, config.github.owner),
       }),
     });
 

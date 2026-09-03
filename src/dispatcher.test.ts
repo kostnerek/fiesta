@@ -23,6 +23,7 @@ function build() {
   const git = {
     ensureMirror: vi.fn().mockResolvedValue('/root/repos/demo'),
     prepareWorkspace: vi.fn().mockResolvedValue('/root/work/aBcD1234'),
+    writeAgentEnvFile: vi.fn().mockResolvedValue('/root/env/aBcD1234.env'),
   };
   const dispatcher = new Dispatcher({
     trello: trello as never,
@@ -32,7 +33,7 @@ function build() {
       trello: {
         lists: { backlog: 'list-backlog', inProgress: 'list-progress', blocked: 'list-blocked' },
       },
-      github: { owner: 'kostnerek', token: 'gh' },
+      github: { owner: 'kostnerek', token: 'gh-secret-token' },
       paths: { root: '/root', claudeCredentials: '/creds' },
     } as never,
   });
@@ -54,6 +55,22 @@ describe('Dispatcher.claimAndStart', () => {
     const { dispatcher, herdr } = build();
     await dispatcher.claimAndStart(makeCard());
     expect(herdr.createWorkspace).toHaveBeenCalledWith('aBcD1234', '/root/work/aBcD1234');
+  });
+
+  it('gives the agent a push-capable checkout and its secrets through an env file', async () => {
+    const { dispatcher, git, herdr } = build();
+    await dispatcher.claimAndStart(makeCard());
+
+    expect(git.prepareWorkspace).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'kostnerek' }),
+    );
+    expect(git.writeAgentEnvFile).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'kostnerek', token: 'gh-secret-token' }),
+    );
+    const { command } = herdr.startAgent.mock.calls[0]![0] as { command: string };
+    expect(command).toContain('--env-file /root/env/aBcD1234.env');
+    expect(command).not.toContain('gh-secret-token');
+    expect(command).not.toContain('GITHUB_TOKEN');
   });
 
   it('sends an unreadable card to Backlog, out of reach of the orphan rule', async () => {

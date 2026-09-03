@@ -35,29 +35,6 @@ export class GitHubClient {
     return this.request('/user');
   }
 
-  async createDraftPr(params: {
-    repo: string;
-    title: string;
-    head: string;
-    base: string;
-    body: string;
-  }): Promise<PullRequest> {
-    const payload = await this.request<PullRequestPayload>(
-      `/repos/${this.credentials.owner}/${params.repo}/pulls`,
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          title: params.title,
-          head: params.head,
-          base: params.base,
-          body: params.body,
-          draft: true,
-        }),
-      },
-    );
-    return toPullRequest(payload);
-  }
-
   async findPrByBranch(repo: string, branch: string): Promise<PullRequest | null> {
     const query = new URLSearchParams({
       head: `${this.credentials.owner}:${branch}`,

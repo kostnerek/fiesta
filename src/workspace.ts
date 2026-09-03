@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, mkdir, rm } from 'node:fs/promises';
+import { access, chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { Ticket } from './ticket.js';
@@ -88,9 +88,14 @@ export async function ensureMirror(params: {
   return mirrorPath;
 }
 
+export function remoteUrl(owner: string, repo: string): string {
+  return `https://github.com/${owner}/${repo}.git`;
+}
+
 export async function prepareWorkspace(params: {
   root: string;
   mirrorPath: string;
+  owner: string;
   ticket: Ticket;
 }): Promise<string> {
   const workspacePath = join(params.root, 'work', params.ticket.shortLink);
@@ -108,7 +113,40 @@ export async function prepareWorkspace(params: {
     params.ticket.branch,
     `origin/${params.ticket.baseBranch}`,
   ]);
+  await git([
+    '-C',
+    workspacePath,
+    'remote',
+    'set-url',
+    'origin',
+    remoteUrl(params.owner, params.ticket.repo),
+  ]);
   return workspacePath;
+}
+
+export function agentEnvPath(root: string, shortLink: string): string {
+  return join(root, 'env', `${shortLink}.env`);
+}
+
+export async function writeAgentEnvFile(params: {
+  root: string;
+  owner: string;
+  token: string;
+  ticket: Ticket;
+}): Promise<string> {
+  const path = agentEnvPath(params.root, params.ticket.shortLink);
+  const body = [
+    `GITHUB_TOKEN=${params.token}`,
+    `GITHUB_OWNER=${params.owner}`,
+    `FIESTA_REPO=${params.ticket.repo}`,
+    `FIESTA_BASE_BRANCH=${params.ticket.baseBranch}`,
+    '',
+  ].join('\n');
+
+  await mkdir(join(params.root, 'env'), { recursive: true, mode: 0o700 });
+  await writeFile(path, body, { mode: 0o600 });
+  await chmod(path, 0o600);
+  return path;
 }
 
 export async function removeWorkspace(params: { root: string; shortLink: string }): Promise<void> {
@@ -120,4 +158,10 @@ export async function removeWorkspace(params: { root: string; shortLink: string 
   }
 
   await rm(target, { recursive: true, force: true });
+
+  const envBase = resolve(params.root, 'env');
+  const envTarget = resolve(agentEnvPath(params.root, params.shortLink));
+  if (envTarget.startsWith(envBase + sep)) {
+    await rm(envTarget, { force: true });
+  }
 }
