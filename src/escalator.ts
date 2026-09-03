@@ -2,7 +2,12 @@ import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
 import { findLastMarker, type Marker } from './markers.js';
 import type { Ticket } from './ticket.js';
-import { extractShortLink, formatEscalation, type TelegramClient } from './telegram.js';
+import {
+  extractShortLink,
+  formatEscalation,
+  type TelegramClient,
+  type TelegramUpdate,
+} from './telegram.js';
 import type { TrelloClient } from './trello.js';
 
 export type Outcome = 'running' | 'blocked' | 'review';
@@ -19,6 +24,7 @@ function isSameMarker(marker: Marker, previous: Marker | null): boolean {
 
 export class Escalator {
   private telegramOffset = 0;
+  private telegramPrimed = false;
 
   constructor(
     private readonly deps: {
@@ -74,10 +80,16 @@ export class Escalator {
     const { herdr, telegram, trello, config } = this.deps;
     const updates = await telegram.getUpdates(this.telegramOffset);
 
+    if (!this.telegramPrimed) {
+      await this.skipBacklog(updates, active);
+      return;
+    }
+
     for (const update of updates) {
       const shortLink = update.replyToText ? extractShortLink(update.replyToText) : null;
       try {
-        const target = shortLink ? active.get(shortLink) : undefined;
+        const target =
+          shortLink && update.chatId === config.telegram.chatId ? active.get(shortLink) : undefined;
         if (target) {
           await herdr.sendText(target.paneId, update.text);
           await trello.moveCard(target.ticket.cardId, config.trello.lists.inProgress);
@@ -90,6 +102,35 @@ export class Escalator {
         );
       } finally {
         this.telegramOffset = update.updateId + 1;
+      }
+    }
+  }
+
+  private async skipBacklog(
+    updates: TelegramUpdate[],
+    active: Map<string, ActiveTicket>,
+  ): Promise<void> {
+    const { trello } = this.deps;
+    this.telegramPrimed = true;
+
+    for (const update of updates) {
+      this.telegramOffset = Math.max(this.telegramOffset, update.updateId + 1);
+      const shortLink = update.replyToText ? extractShortLink(update.replyToText) : null;
+      const target = shortLink ? active.get(shortLink) : undefined;
+      console.warn(
+        `[fiesta] skipping Telegram update ${update.updateId} that predates this run` +
+          (shortLink ? ` (reply to ${shortLink})` : ''),
+      );
+      if (!target) {
+        continue;
+      }
+      try {
+        await trello.addComment(
+          target.ticket.cardId,
+          '🤖 A Telegram reply arrived while Fiesta was down and was not delivered. Please resend it.',
+        );
+      } catch (error) {
+        console.error(`Failed to flag a skipped Telegram reply for ${shortLink}:`, error);
       }
     }
   }

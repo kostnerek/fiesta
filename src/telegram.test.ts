@@ -69,11 +69,63 @@ describe('TelegramClient', () => {
     ]);
   });
 
-  it('drops updates that are not replies', async () => {
+  it('keeps a plain message as an update with a null replyToText', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ ok: true, result: [{ update_id: 12, message: { chat: { id: 42 }, text: 'hi' } }] }),
     );
     const updates = await new TelegramClient('token', fetchMock).getUpdates(10);
     expect(updates[0]!.replyToText).toBeNull();
+  });
+
+  it('sends the message in a POST body, never in the query string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: {} }));
+    const text = 'x'.repeat(3000);
+
+    await new TelegramClient('secret-bot-token', fetchMock).send('42', text);
+
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe('https://api.telegram.org/botsecret-bot-token/sendMessage');
+    expect(url).not.toContain('chat_id');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ chat_id: '42', text });
+  });
+
+  it('asks getUpdates for the offset it was given', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true, result: [] }));
+
+    await new TelegramClient('token', fetchMock).getUpdates(11);
+
+    const [, init] = fetchMock.mock.calls[0]! as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ offset: 11, timeout: 0 });
+  });
+
+  it('reads the bot username from getMe', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ ok: true, result: { username: 'fiesta_bot' } }));
+
+    await expect(new TelegramClient('token', fetchMock).getMe()).resolves.toEqual({
+      username: 'fiesta_bot',
+    });
+  });
+
+  it('throws with Telegram\'s own description when the API answers ok: false', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ ok: false, description: 'chat not found' }));
+
+    await expect(new TelegramClient('token', fetchMock).send('42', 'hi')).rejects.toThrow(
+      /sendMessage rejected: chat not found/,
+    );
+  });
+
+  it('throws on a non-2xx response', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('too many requests', { status: 429 }));
+
+    await expect(new TelegramClient('token', fetchMock).send('42', 'hi')).rejects.toThrow(
+      /sendMessage failed: 429/,
+    );
   });
 });

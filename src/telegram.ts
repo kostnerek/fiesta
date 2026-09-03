@@ -34,12 +34,12 @@ export class TelegramClient {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  private async request<T>(method: string, params: Record<string, string>): Promise<T> {
-    const url = new URL(`https://api.telegram.org/bot${this.botToken}/${method}`);
-    for (const [name, value] of Object.entries(params)) {
-      url.searchParams.set(name, value);
-    }
-    const response = await this.fetchImpl(url.toString());
+  private async request<T>(method: string, params: Record<string, string | number>): Promise<T> {
+    const response = await this.fetchImpl(`https://api.telegram.org/bot${this.botToken}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(params),
+    });
     if (!response.ok) {
       throw new Error(`Telegram ${method} failed: ${response.status} ${await response.text()}`);
     }
@@ -61,7 +61,7 @@ export class TelegramClient {
   async getUpdates(offset: number): Promise<TelegramUpdate[]> {
     const raw = await this.request<
       { update_id: number; message?: { chat: { id: number }; text?: string; reply_to_message?: { text?: string } } }[]
-    >('getUpdates', { offset: String(offset), timeout: '0' });
+    >('getUpdates', { offset, timeout: 0 });
 
     return raw
       .filter((update) => update.message?.text)
