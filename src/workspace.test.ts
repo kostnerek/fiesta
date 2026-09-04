@@ -9,7 +9,7 @@ import {
   ensureMirror,
   prepareWorkspace,
   removeWorkspace,
-  shareAgentCredentials,
+  shareClaudeSession,
   writeAgentEnvFile,
 } from './workspace.js';
 import type { Ticket } from './ticket.js';
@@ -277,34 +277,6 @@ describe('writeAgentEnvFile prompt delivery', () => {
   });
 });
 
-describe('shareAgentCredentials', () => {
-  it('hands back the operator file itself, so a refreshed token is not thrown away', async () => {
-    const source = join(root, 'source-credentials.json');
-    await writeFile(source, '{"token":"secret"}', { mode: 0o600 });
-
-    const path = await shareAgentCredentials({ source });
-
-    expect(path).toBe(source);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
-  });
-
-  it('survives the workspace it was used by', async () => {
-    const source = join(root, 'source-credentials-2.json');
-    await writeFile(source, '{}', { mode: 0o600 });
-    const path = await shareAgentCredentials({ source });
-
-    await removeWorkspace({ root, shortLink: ticket.shortLink });
-
-    await expect(stat(path)).resolves.toBeTruthy();
-  });
-
-  it('refuses a source that is not there rather than dispatching without one', async () => {
-    await expect(shareAgentCredentials({ source: join(root, 'absent.json') })).rejects.toThrow(
-      /absent\.json/,
-    );
-  });
-});
-
 describe('writeAgentEnvFile build daemon', () => {
   it('points docker at the isolated daemon, so testcontainers never reaches the host', async () => {
     const root = await mkdtemp(join(tmpdir(), 'fiesta-env-'));
@@ -320,5 +292,54 @@ describe('writeAgentEnvFile build daemon', () => {
     const body = await readFile(path, 'utf8');
     expect(body).toContain('DOCKER_HOST=tcp://fiesta-dind:2375');
     expect(body).toContain('TESTCONTAINERS_HOST_OVERRIDE=fiesta-dind');
+  });
+});
+
+describe('shareClaudeSession', () => {
+  async function makeHome(): Promise<string> {
+    const home = await mkdtemp(join(tmpdir(), 'fiesta-home-'));
+    await mkdir(join(home, '.claude'), { recursive: true });
+    await writeFile(join(home, '.claude', '.credentials.json'), '{"claudeAiOauth":{}}', {
+      mode: 0o600,
+    });
+    await writeFile(join(home, '.claude.json'), '{"hasCompletedOnboarding":true}', { mode: 0o600 });
+    return home;
+  }
+
+  it('hands back both files Claude needs, not the credentials alone', async () => {
+    const home = await makeHome();
+    const session = await shareClaudeSession({ home });
+
+    expect(session.credentialsPath).toBe(join(home, '.claude', '.credentials.json'));
+    expect(session.configPath).toBe(join(home, '.claude.json'));
+  });
+
+  it('declares the container workspace trusted, so the agent is not stopped by a dialog', async () => {
+    const home = await makeHome();
+    await shareClaudeSession({ home });
+
+    const config = JSON.parse(await readFile(join(home, '.claude.json'), 'utf8'));
+    expect(config.projects['/workspace'].hasTrustDialogAccepted).toBe(true);
+  });
+
+  it('keeps what the operator already had in the file', async () => {
+    const home = await makeHome();
+    await shareClaudeSession({ home });
+
+    const config = JSON.parse(await readFile(join(home, '.claude.json'), 'utf8'));
+    expect(config.hasCompletedOnboarding).toBe(true);
+  });
+
+  it('leaves both files owner-only', async () => {
+    const home = await makeHome();
+    const session = await shareClaudeSession({ home });
+
+    expect((await stat(session.credentialsPath)).mode & 0o777).toBe(0o600);
+    expect((await stat(session.configPath)).mode & 0o777).toBe(0o600);
+  });
+
+  it('says which file is missing rather than dispatching a container that cannot log in', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'fiesta-home-'));
+    await expect(shareClaudeSession({ home })).rejects.toThrow(/credentials\.json/);
   });
 });

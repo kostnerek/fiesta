@@ -42,6 +42,7 @@ export function buildPrompt(ticket: Ticket, owner: string, sources: RepoSource[]
 export function buildAgentCommand(params: {
   workspacePath: string;
   credentialsPath: string;
+  configPath: string;
   envFilePath: string;
 }): string {
   return [
@@ -49,6 +50,7 @@ export function buildAgentCommand(params: {
     '--network fiesta-net',
     `-v ${params.workspacePath}:/workspace`,
     `-v ${params.credentialsPath}:/home/agent/.claude/.credentials.json`,
+    `-v ${params.configPath}:/home/agent/.claude.json`,
     '-v fiesta-pnpm-store:/home/agent/.pnpm-store',
     '-v fiesta-go-cache:/home/agent/go',
     `--env-file ${params.envFilePath}`,

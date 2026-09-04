@@ -1,3 +1,4 @@
+import { dirname } from 'node:path';
 import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
 import { buildAgentCommand, buildPrompt } from './prompt.js';
@@ -9,7 +10,7 @@ import type {
   ensureMirror,
   prepareWorkspace,
   workspaceRoot,
-  shareAgentCredentials,
+  shareClaudeSession,
   writeAgentEnvFile,
 } from './workspace.js';
 
@@ -17,7 +18,7 @@ type GitOperations = {
   ensureMirror: typeof ensureMirror;
   prepareWorkspace: typeof prepareWorkspace;
   writeAgentEnvFile: typeof writeAgentEnvFile;
-  shareAgentCredentials: typeof shareAgentCredentials;
+  shareClaudeSession: typeof shareClaudeSession;
   workspaceRoot: typeof workspaceRoot;
 };
 
@@ -73,8 +74,8 @@ export class Dispatcher {
     }
 
     const workspacePath = git.workspaceRoot(config.paths.root, ticket.shortLink);
-    const credentialsPath = await git.shareAgentCredentials({
-      source: `${config.paths.claudeCredentials}/.credentials.json`,
+    const session = await git.shareClaudeSession({
+      home: dirname(config.paths.claudeCredentials),
     });
     const envFilePath = await git.writeAgentEnvFile({
       root: config.paths.root,
@@ -89,7 +90,12 @@ export class Dispatcher {
     await herdr.startAgent({
       workspaceId: workspace.id,
       name: ticket.shortLink,
-      command: buildAgentCommand({ workspacePath, credentialsPath, envFilePath }),
+      command: buildAgentCommand({
+        workspacePath,
+        credentialsPath: session.credentialsPath,
+        configPath: session.configPath,
+        envFilePath,
+      }),
     });
 
     await trello.addComment(

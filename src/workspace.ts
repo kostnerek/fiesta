@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, chmod, chown, mkdir, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, chown, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoSource } from './repo-source.js';
@@ -155,15 +155,43 @@ export function agentEnvPath(root: string, shortLink: string): string {
   return join(root, 'env', `${shortLink}.env`);
 }
 
-export async function shareAgentCredentials(params: { source: string }): Promise<string> {
-  await stat(params.source);
-  await chmod(params.source, 0o600);
+export const AGENT_WORKSPACE = '/workspace';
+
+export type ClaudeSession = { credentialsPath: string; configPath: string };
+
+async function ownedByAgent(path: string): Promise<void> {
+  await chmod(path, 0o600);
   try {
-    await chown(params.source, AGENT_UID, AGENT_GID);
+    await chown(path, AGENT_UID, AGENT_GID);
   } catch {
-    return params.source;
+    return;
   }
-  return params.source;
+}
+
+async function trustAgentWorkspace(configPath: string): Promise<void> {
+  const config = JSON.parse(await readFile(configPath, 'utf8')) as {
+    projects?: Record<string, Record<string, unknown>>;
+  };
+  const projects = config.projects ?? {};
+  projects[AGENT_WORKSPACE] = { ...projects[AGENT_WORKSPACE], hasTrustDialogAccepted: true };
+  await writeFile(configPath, JSON.stringify({ ...config, projects }), { mode: 0o600 });
+}
+
+export async function shareClaudeSession(params: { home: string }): Promise<ClaudeSession> {
+  const credentialsPath = join(params.home, '.claude', '.credentials.json');
+  const configPath = join(params.home, '.claude.json');
+
+  for (const path of [credentialsPath, configPath]) {
+    await stat(path).catch(() => {
+      throw new Error(`Claude is not signed in on this machine: ${path} is missing`);
+    });
+  }
+
+  await trustAgentWorkspace(configPath);
+  await ownedByAgent(credentialsPath);
+  await ownedByAgent(configPath);
+
+  return { credentialsPath, configPath };
 }
 
 export async function writeAgentEnvFile(params: {

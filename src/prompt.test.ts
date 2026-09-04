@@ -45,7 +45,8 @@ describe('buildAgentCommand', () => {
   function build(overrides: Partial<Parameters<typeof buildAgentCommand>[0]> = {}) {
     return buildAgentCommand({
       workspacePath: '/root/work/aBcD1234',
-      credentialsPath: '/root/env/aBcD1234.credentials.json',
+      credentialsPath: '/root/.claude/.credentials.json',
+      configPath: '/root/.claude.json',
       envFilePath: '/root/env/aBcD1234.env',
       ...overrides,
     });
@@ -101,7 +102,8 @@ describe('buildAgentCommand ownership', () => {
   it('does not force a user, because Claude Code refuses to run as root', () => {
     const command = buildAgentCommand({
       workspacePath: '/root/work/aBcD1234',
-      credentialsPath: '/root/env/aBcD1234.credentials.json',
+      credentialsPath: '/root/.claude/.credentials.json',
+      configPath: '/root/.claude.json',
       envFilePath: '/root/env/aBcD1234.env',
     });
 
@@ -111,12 +113,13 @@ describe('buildAgentCommand ownership', () => {
   it('mounts the per-ticket credentials copy, not the operator home file', () => {
     const command = buildAgentCommand({
       workspacePath: '/w',
-      credentialsPath: '/root/env/aBcD1234.credentials.json',
+      credentialsPath: '/root/.claude/.credentials.json',
+      configPath: '/root/.claude.json',
       envFilePath: '/e',
     });
 
     expect(command).toContain(
-      '-v /root/env/aBcD1234.credentials.json:/home/agent/.claude/.credentials.json',
+      '-v /root/.claude/.credentials.json:/home/agent/.claude/.credentials.json',
     );
   });
 });
@@ -126,6 +129,7 @@ describe('buildAgentCommand stdin', () => {
     const command = buildAgentCommand({
       workspacePath: '/w',
       credentialsPath: '/c.json',
+      configPath: '/cfg.json',
       envFilePath: '/e',
     });
 
@@ -138,6 +142,7 @@ describe('buildAgentCommand build tooling', () => {
     return buildAgentCommand({
       workspacePath: '/w',
       credentialsPath: '/c.json',
+      configPath: '/cfg.json',
       envFilePath: '/e',
     });
   }
@@ -155,5 +160,18 @@ describe('buildAgentCommand build tooling', () => {
 
     expect(command).toContain('-v fiesta-pnpm-store:/home/agent/.pnpm-store');
     expect(command).toContain('-v fiesta-go-cache:/home/agent/go');
+  });
+});
+
+describe('buildAgentCommand claude session', () => {
+  it('mounts the account config too, without which Claude runs onboarding instead of the ticket', () => {
+    const command = buildAgentCommand({
+      workspacePath: '/w',
+      credentialsPath: '/root/.claude/.credentials.json',
+      configPath: '/root/.claude.json',
+      envFilePath: '/e',
+    });
+
+    expect(command).toContain('-v /root/.claude.json:/home/agent/.claude.json');
   });
 });
