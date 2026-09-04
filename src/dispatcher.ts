@@ -9,7 +9,7 @@ import type {
   ensureMirror,
   prepareWorkspace,
   workspaceRoot,
-  writeAgentCredentials,
+  shareAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 
@@ -17,7 +17,7 @@ type GitOperations = {
   ensureMirror: typeof ensureMirror;
   prepareWorkspace: typeof prepareWorkspace;
   writeAgentEnvFile: typeof writeAgentEnvFile;
-  writeAgentCredentials: typeof writeAgentCredentials;
+  shareAgentCredentials: typeof shareAgentCredentials;
   workspaceRoot: typeof workspaceRoot;
 };
 
@@ -73,9 +73,7 @@ export class Dispatcher {
     }
 
     const workspacePath = git.workspaceRoot(config.paths.root, ticket.shortLink);
-    const credentialsPath = await git.writeAgentCredentials({
-      root: config.paths.root,
-      shortLink: ticket.shortLink,
+    const credentialsPath = await git.shareAgentCredentials({
       source: `${config.paths.claudeCredentials}/.credentials.json`,
     });
     const envFilePath = await git.writeAgentEnvFile({

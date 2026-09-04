@@ -5,12 +5,11 @@ import { join } from 'node:path';
 import { inspect, promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  agentCredentialsPath,
   agentEnvPath,
   ensureMirror,
   prepareWorkspace,
   removeWorkspace,
-  writeAgentCredentials,
+  shareAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 import type { Ticket } from './ticket.js';
@@ -278,27 +277,31 @@ describe('writeAgentEnvFile prompt delivery', () => {
   });
 });
 
-describe('writeAgentCredentials', () => {
-  it('copies the credentials beside the env file, owner-only', async () => {
+describe('shareAgentCredentials', () => {
+  it('hands back the operator file itself, so a refreshed token is not thrown away', async () => {
     const source = join(root, 'source-credentials.json');
     await writeFile(source, '{"token":"secret"}', { mode: 0o600 });
 
-    const path = await writeAgentCredentials({ root, shortLink: ticket.shortLink, source });
+    const path = await shareAgentCredentials({ source });
 
-    expect(path).toBe(agentCredentialsPath(root, ticket.shortLink));
-    expect(await readFile(path, 'utf8')).toBe('{"token":"secret"}');
+    expect(path).toBe(source);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
-    expect(path.startsWith(join(root, 'work'))).toBe(false);
   });
 
-  it('is removed with the workspace, so a token copy never outlives its ticket', async () => {
+  it('survives the workspace it was used by', async () => {
     const source = join(root, 'source-credentials-2.json');
     await writeFile(source, '{}', { mode: 0o600 });
-    const path = await writeAgentCredentials({ root, shortLink: ticket.shortLink, source });
+    const path = await shareAgentCredentials({ source });
 
     await removeWorkspace({ root, shortLink: ticket.shortLink });
 
-    await expect(stat(path)).rejects.toThrow();
+    await expect(stat(path)).resolves.toBeTruthy();
+  });
+
+  it('refuses a source that is not there rather than dispatching without one', async () => {
+    await expect(shareAgentCredentials({ source: join(root, 'absent.json') })).rejects.toThrow(
+      /absent\.json/,
+    );
   });
 });
 

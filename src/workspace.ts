@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, chmod, chown, copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
+import { access, chmod, chown, mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoSource } from './repo-source.js';
@@ -155,25 +155,15 @@ export function agentEnvPath(root: string, shortLink: string): string {
   return join(root, 'env', `${shortLink}.env`);
 }
 
-export function agentCredentialsPath(root: string, shortLink: string): string {
-  return join(root, 'env', `${shortLink}.credentials.json`);
-}
-
-export async function writeAgentCredentials(params: {
-  root: string;
-  shortLink: string;
-  source: string;
-}): Promise<string> {
-  const target = agentCredentialsPath(params.root, params.shortLink);
-  await mkdir(join(params.root, 'env'), { recursive: true, mode: 0o700 });
-  await copyFile(params.source, target);
-  await chmod(target, 0o600);
+export async function shareAgentCredentials(params: { source: string }): Promise<string> {
+  await stat(params.source);
+  await chmod(params.source, 0o600);
   try {
-    await chown(target, AGENT_UID, AGENT_GID);
+    await chown(params.source, AGENT_UID, AGENT_GID);
   } catch {
-    return target;
+    return params.source;
   }
-  return target;
+  return params.source;
 }
 
 export async function writeAgentEnvFile(params: {
@@ -216,12 +206,8 @@ export async function removeWorkspace(params: { root: string; shortLink: string 
   await rm(join(params.root, 'state', `${params.shortLink}.comments`), { force: true });
 
   const envBase = resolve(params.root, 'env');
-  for (const path of [
-    agentEnvPath(params.root, params.shortLink),
-    agentCredentialsPath(params.root, params.shortLink),
-  ]) {
-    if (resolve(path).startsWith(envBase + sep)) {
-      await rm(path, { force: true });
-    }
+  const envFile = agentEnvPath(params.root, params.shortLink);
+  if (resolve(envFile).startsWith(envBase + sep)) {
+    await rm(envFile, { force: true });
   }
 }

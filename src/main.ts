@@ -17,7 +17,7 @@ import {
   prepareWorkspace,
   removeWorkspace,
   workspaceRoot,
-  writeAgentCredentials,
+  shareAgentCredentials,
   writeAgentEnvFile,
 } from './workspace.js';
 
@@ -62,7 +62,7 @@ const loop = new Loop({
       ensureMirror,
       prepareWorkspace,
       writeAgentEnvFile,
-      writeAgentCredentials,
+      shareAgentCredentials,
       workspaceRoot,
     },
     projects: { readProjects, resolveProject, resolveRepoSource },

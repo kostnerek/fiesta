@@ -25,7 +25,7 @@ function build() {
     prepareWorkspace: vi.fn().mockResolvedValue('/root/work/aBcD1234'),
     writeAgentEnvFile: vi.fn().mockResolvedValue('/root/env/aBcD1234.env'),
     workspaceRoot: vi.fn().mockReturnValue('/root/work/aBcD1234'),
-    writeAgentCredentials: vi.fn().mockResolvedValue('/root/env/aBcD1234.credentials.json'),
+    shareAgentCredentials: vi.fn().mockResolvedValue('/root/.claude/.credentials.json'),
   };
   const projects = {
     readProjects: vi.fn().mockResolvedValue({ demo: ['demo'] }),
