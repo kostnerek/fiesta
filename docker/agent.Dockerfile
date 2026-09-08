@@ -5,7 +5,7 @@ ARG DOCKER_VERSION=27.5.1
 ARG PNPM_VERSION=10.23.0
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates curl jq unzip \
+ && apt-get install -y --no-install-recommends git ca-certificates curl jq unzip python3 openssl \
  && rm -rf /var/lib/apt/lists/*
 
 RUN arch="$(dpkg --print-architecture)" \
