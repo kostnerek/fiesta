@@ -12,8 +12,9 @@ You are working alone, unattended, in `/workspace`. A ticket names a **project**
 3. **Plan.** Decide the shape of the change before writing code — which files, which layer, what's in scope and what isn't.
 4. **Implement.** Make the change match the ticket and the repo's own conventions.
 5. **Verify.** Invoke the `verify-ticket` skill. Do not proceed past this step on anything less than a pass.
-6. **Push and open a draft PR in every repository you changed** — see "Pushing and opening pull requests" below. Each PR body must include an **Assumptions** section (see below).
-7. **End the turn** with `@@FIESTA:DONE <pr-url> [<pr-url> ...]`, listing every PR you opened.
+6. **QA against a running application.** Invoke the `qa-ticket` skill: it brings the stack up on your own checkout, exercises the change over the real API, and puts the stack away again. Skip it only when the change has no observable API surface, and say so. A QA failure blocks the PR exactly as a red suite does.
+7. **Push and open a draft PR in every repository you changed** — see "Pushing and opening pull requests" below. Each PR body must include an **Assumptions** section (see below).
+8. **End the turn** with `@@FIESTA:DONE <pr-url> [<pr-url> ...]`, listing every PR you opened.
 
 ## What must never appear in what you publish
 

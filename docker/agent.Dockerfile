@@ -30,8 +30,9 @@ RUN useradd --create-home --uid 1001 agent \
  && chown -R agent:agent /home/agent
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/stack/fiesta-stack /usr/local/bin/fiesta-stack
 COPY docker/githooks /usr/local/share/git-hooks
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/share/git-hooks/*
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/fiesta-stack /usr/local/share/git-hooks/*
 
 COPY skills /home/agent/.claude/skills
 COPY docker/claude/settings.json /home/agent/.claude/settings.json

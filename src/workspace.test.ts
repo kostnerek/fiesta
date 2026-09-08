@@ -10,6 +10,7 @@ import {
   prepareWorkspace,
   removeWorkspace,
   shareClaudeSession,
+  workspaceRoot,
   writeAgentEnvFile,
 } from './workspace.js';
 import type { Ticket } from './ticket.js';
@@ -341,5 +342,22 @@ describe('shareClaudeSession', () => {
   it('says which file is missing rather than dispatching a container that cannot log in', async () => {
     const home = await mkdtemp(join(tmpdir(), 'fiesta-home-'));
     await expect(shareClaudeSession({ home })).rejects.toThrow(/credentials\.json/);
+  });
+});
+
+describe('writeAgentEnvFile workspace path', () => {
+  it('carries the host path, without which a stack the agent starts would mount an empty directory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-env-'));
+    const path = await writeAgentEnvFile({
+      root,
+      owner: 'kostnerek',
+      token: 'gh-token',
+      sources: [],
+      prompt: 'p',
+      ticket,
+    });
+
+    const body = await readFile(path, 'utf8');
+    expect(body).toContain(`FIESTA_WORKSPACE_HOST=${workspaceRoot(root, ticket.shortLink)}`);
   });
 });
