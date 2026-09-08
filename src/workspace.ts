@@ -7,6 +7,9 @@ import { ticketRef, type Ticket } from './ticket.js';
 
 const execFileAsync = promisify(execFile);
 
+export const AGENT_UID = 1001;
+export const AGENT_GID = 1001;
+
 function redact(value: string, secrets: string[]): string {
   return secrets.reduce((acc, secret) => (secret ? acc.split(secret).join('[REDACTED]') : acc), value);
 }
@@ -145,11 +148,21 @@ export async function prepareWorkspace(params: {
     'origin',
     remoteUrl(params.source.owner, params.source.repo),
   ]);
+  // The daemon runs as root and the agent as another user; without this the
+  // checkout is read-only to the only process that is meant to edit it, and the
+  // agent quietly works somewhere else instead.
+  await giveToAgent(checkoutPath);
   return checkoutPath;
 }
 
-export const AGENT_UID = 1001;
-export const AGENT_GID = 1001;
+async function giveToAgent(path: string): Promise<void> {
+  try {
+    await execFileAsync('chown', ['-R', `${AGENT_UID}:${AGENT_GID}`, path]);
+  } catch {
+    await execFileAsync('chmod', ['-R', 'a+rwX', path]);
+  }
+}
+
 
 export function agentEnvPath(root: string, shortLink: string): string {
   return join(root, 'env', `${shortLink}.env`);

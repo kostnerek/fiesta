@@ -9,6 +9,7 @@ import {
   ensureMirror,
   prepareWorkspace,
   removeWorkspace,
+  AGENT_UID,
   shareClaudeSession,
   workspaceRoot,
   writeAgentEnvFile,
@@ -381,5 +382,17 @@ describe('the path handed to the agent', () => {
     expect(host).toBeDefined();
     expect(host).not.toContain(ticket.shortLink);
     expect(host).toContain(ticketRef(ticket.shortLink));
+  });
+});
+
+describe('prepareWorkspace ownership', () => {
+  it('leaves the checkout writable by the agent, which is the only user that edits it', async () => {
+    const checkout = await prepareWorkspace({ root, mirrorPath, source: SOURCE, ticket });
+
+    const info = await stat(checkout);
+    const ownedByAgent = info.uid === AGENT_UID;
+    const writableByAnyone = (info.mode & 0o002) !== 0;
+
+    expect(ownedByAgent || writableByAnyone).toBe(true);
   });
 });
