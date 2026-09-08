@@ -3,7 +3,7 @@ import { access, chmod, chown, mkdir, readFile, rm, stat, writeFile } from 'node
 import { join, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoSource } from './repo-source.js';
-import type { Ticket } from './ticket.js';
+import { ticketRef, type Ticket } from './ticket.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -113,7 +113,7 @@ export function remoteUrl(owner: string, repo: string): string {
 }
 
 export function workspaceRoot(root: string, shortLink: string): string {
-  return join(root, 'work', shortLink);
+  return join(root, 'work', ticketRef(shortLink));
 }
 
 export async function prepareWorkspace(params: {

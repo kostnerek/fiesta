@@ -42,8 +42,12 @@ function slugify(title: string): string {
     .replace(/-+$/g, '');
 }
 
+export function ticketRef(shortLink: string): string {
+  return createHash('sha256').update(shortLink).digest('hex').slice(0, BRANCH_SUFFIX_LENGTH);
+}
+
 export function branchName(shortLink: string, title: string): string {
-  const suffix = createHash('sha256').update(shortLink).digest('hex').slice(0, BRANCH_SUFFIX_LENGTH);
+  const suffix = ticketRef(shortLink);
   const slug = slugify(title);
   return slug ? `${slug}-${suffix}` : suffix;
 }

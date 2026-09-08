@@ -13,7 +13,7 @@ import {
   workspaceRoot,
   writeAgentEnvFile,
 } from './workspace.js';
-import type { Ticket } from './ticket.js';
+import { ticketRef, type Ticket } from './ticket.js';
 
 const run = promisify(execFile);
 
@@ -359,5 +359,27 @@ describe('writeAgentEnvFile workspace path', () => {
 
     const body = await readFile(path, 'utf8');
     expect(body).toContain(`FIESTA_WORKSPACE_HOST=${workspaceRoot(root, ticket.shortLink)}`);
+  });
+});
+
+describe('the path handed to the agent', () => {
+  it('never contains the card id, because the agent must not be able to publish it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fiesta-env-'));
+    const path = await writeAgentEnvFile({
+      root,
+      owner: 'kostnerek',
+      token: 'gh-token',
+      sources: [],
+      prompt: 'p',
+      ticket,
+    });
+
+    const host = (await readFile(path, 'utf8'))
+      .split('\n')
+      .find((line) => line.startsWith('FIESTA_WORKSPACE_HOST='));
+
+    expect(host).toBeDefined();
+    expect(host).not.toContain(ticket.shortLink);
+    expect(host).toContain(ticketRef(ticket.shortLink));
   });
 });

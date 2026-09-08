@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TicketError, toTicket, type TrelloCard } from './ticket.js';
+import { branchName, TicketError, ticketRef, toTicket, type TrelloCard } from './ticket.js';
 
 function makeCard(overrides: Partial<TrelloCard> = {}): TrelloCard {
   return {
@@ -86,5 +86,23 @@ describe('toTicket when Trello omits labels', () => {
     const card = { ...makeCard(), labels: undefined } as unknown as TrelloCard;
     expect(() => toTicket(card)).toThrow(TicketError);
     expect(() => toTicket(card)).toThrow(/without its labels/);
+  });
+});
+
+describe('ticketRef', () => {
+  it('is the same short reference the branch name ends with', () => {
+    expect(branchName('pi1Apr0A', 'V3 API')).toBe(`v3-api-${ticketRef('pi1Apr0A')}`);
+  });
+
+  it('never contains the card id, which is the whole point', () => {
+    expect(ticketRef('pi1Apr0A')).not.toContain('pi1Apr0A');
+  });
+
+  it('is stable, so a re-dispatched ticket finds its own workspace again', () => {
+    expect(ticketRef('pi1Apr0A')).toBe(ticketRef('pi1Apr0A'));
+  });
+
+  it('separates two cards', () => {
+    expect(ticketRef('aaaa1111')).not.toBe(ticketRef('bbbb2222'));
   });
 });

@@ -18,6 +18,12 @@ You are working alone, unattended, in `/workspace`. A ticket names a **project**
 
 ## What must never appear in what you publish
 
+The branch name, the commit messages, the pull request and any reply on it must carry
+no identifier that points back at the board. You are not given the card's id and you do
+not need it: the branch already ends in a short reference that is not the card. Do not
+go looking for one in your environment or your working directory to put it back in.
+
+
 The pull request, its title, its body, every commit message, and every reply you post on the
 pull request are read by people who have nothing to do with how this work was scheduled.
 
