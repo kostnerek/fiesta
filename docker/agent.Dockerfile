@@ -38,6 +38,7 @@ COPY docker/claude/settings.json /home/agent/.claude/settings.json
 RUN chown -R agent:agent /home/agent && chmod -R a+rwX /home/agent
 
 ENV HOME=/home/agent
+ENV DISABLE_AUTOUPDATER=1
 USER agent
 WORKDIR /workspace
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
