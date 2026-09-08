@@ -34,6 +34,7 @@ COPY docker/githooks /usr/local/share/git-hooks
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/share/git-hooks/*
 
 COPY skills /home/agent/.claude/skills
+COPY docker/claude/settings.json /home/agent/.claude/settings.json
 RUN chown -R agent:agent /home/agent && chmod -R a+rwX /home/agent
 
 ENV HOME=/home/agent
