@@ -39,7 +39,10 @@ export class Dispatcher {
     },
   ) {}
 
-  async claimAndStart(card: TrelloCard): Promise<void> {
+  async claimAndStart(
+    card: TrelloCard,
+    onClaimed?: (shortLink: string, title: string) => Promise<void>,
+  ): Promise<void> {
     const { trello, herdr, git, projects, config } = this.deps;
 
     let ticket: Ticket;
@@ -63,6 +66,7 @@ export class Dispatcher {
     }
 
     await trello.moveCard(card.id, config.trello.lists.inProgress);
+    await onClaimed?.(card.shortLink, card.name);
 
     for (const source of sources) {
       const mirrorPath = await git.ensureMirror({

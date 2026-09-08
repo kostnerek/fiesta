@@ -58,6 +58,18 @@ export class TelegramClient {
     await this.request('sendMessage', { chat_id: chatId, text });
   }
 
+  async sendTracked(chatId: string, text: string): Promise<number> {
+    const message = await this.request<{ message_id: number }>('sendMessage', {
+      chat_id: chatId,
+      text,
+    });
+    return message.message_id;
+  }
+
+  async edit(chatId: string, messageId: number, text: string): Promise<void> {
+    await this.request('editMessageText', { chat_id: chatId, message_id: messageId, text });
+  }
+
   async getUpdates(offset: number): Promise<TelegramUpdate[]> {
     const raw = await this.request<
       { update_id: number; message?: { chat: { id: number }; text?: string; reply_to_message?: { text?: string } } }[]

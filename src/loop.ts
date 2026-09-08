@@ -8,6 +8,8 @@ import type { readProjects, resolveProject } from './projects.js';
 import type { resolveRepoSource } from './repo-source.js';
 import type { HerdrClient, HerdrWorkspace } from './herdr.js';
 import { TicketError, toTicket, type Ticket, type TrelloCard } from './ticket.js';
+import { isStage } from './progress.js';
+import { ProgressTracker } from './progress-tracker.js';
 import type { TelegramClient } from './telegram.js';
 import type { TrelloClient } from './trello.js';
 import {
@@ -47,6 +49,7 @@ type ReclaimResult = { inProgress: ActiveWorkspaceCard[]; blocked: ActiveWorkspa
 export class Loop {
   private readonly lastActivityAt = new Map<string, number>();
   private readonly lastMarker = new Map<string, Marker>();
+  private progress: ProgressTracker | null = null;
   private readonly dispatchFailures = new Map<string, number>();
   private tickFailures = 0;
   private credentialsWarned = false;
@@ -126,13 +129,14 @@ export class Loop {
         this.lastActivityAt.set(card.shortLink, since);
       }
       try {
-        const { outcome, marker } = await escalator.inspect(entry.ticket, entry.paneId, {
+        const { outcome, marker, step } = await escalator.inspect(entry.ticket, entry.paneId, {
           since,
           lastMarker: this.lastMarker.get(card.shortLink) ?? null,
         });
         if (marker) {
           this.lastMarker.set(card.shortLink, marker);
         }
+        await this.reportProgress(card.shortLink, card.name, outcome, marker, step);
         if (outcome !== 'running') {
           this.lastActivityAt.delete(card.shortLink);
         }
@@ -181,7 +185,9 @@ export class Loop {
 
     let failure: unknown;
     try {
-      await dispatcher.claimAndStart(card);
+      await dispatcher.claimAndStart(card, (shortLink, title) =>
+          this.tracker().set(shortLink, title, 'claimed'),
+        );
       this.dispatchFailures.delete(card.shortLink);
       return;
     } catch (error) {
@@ -208,6 +214,34 @@ export class Loop {
     await this.notify(
       `🤖 [${card.shortLink}] ${card.name}\n\n🛑 Could not be started ${failures} times in a row; parked in Backlog.\n\n${reason(failure)}`,
     );
+  }
+
+  private tracker(): ProgressTracker {
+    if (!this.progress) {
+      const { telegram, config } = this.deps;
+      this.progress = new ProgressTracker(telegram, config.telegram.chatId);
+    }
+    return this.progress;
+  }
+
+  private async reportProgress(
+    shortLink: string,
+    title: string,
+    outcome: string,
+    marker: Marker | null,
+    step: string | null,
+  ): Promise<void> {
+    if (outcome === 'review') {
+      await this.tracker().set(shortLink, title, 'review');
+      return;
+    }
+    if (outcome === 'blocked') {
+      await this.tracker().set(shortLink, title, 'qa', marker?.text ?? 'agent stopped');
+      return;
+    }
+    if (step && isStage(step)) {
+      await this.tracker().set(shortLink, title, step);
+    }
   }
 
   private async notify(text: string): Promise<void> {
@@ -326,6 +360,7 @@ export class Loop {
         }
 
         await trello.moveCard(card.id, config.trello.lists.done);
+        await this.tracker().set(card.shortLink, card.name, 'merged');
         await trello.addComment(card.id, `🤖 Merged: ${found.map((pr) => pr.url).join(', ')}`);
         const workspace = await herdr.findWorkspaceByLabel(card.shortLink);
         if (workspace) {

@@ -111,7 +111,7 @@ describe('Escalator.inspect', () => {
     });
 
     expect(first.outcome).toBe('blocked');
-    expect(second).toEqual({ outcome: 'running', marker: null });
+    expect(second).toEqual({ outcome: 'running', marker: null, step: null });
     expect(trello.moveCard).toHaveBeenCalledTimes(1);
     expect(telegram.send).toHaveBeenCalledTimes(1);
   });
@@ -133,7 +133,7 @@ describe('Escalator.inspect', () => {
 
     const result = await escalator.inspect(ticket, 'pane-1', { since: null, lastMarker: null });
 
-    expect(result).toEqual({ outcome: 'running', marker: null });
+    expect(result).toEqual({ outcome: 'running', marker: null, step: null });
     expect(herdr.paneStatus).not.toHaveBeenCalled();
     expect(trello.moveCard).not.toHaveBeenCalled();
     expect(telegram.send).not.toHaveBeenCalled();

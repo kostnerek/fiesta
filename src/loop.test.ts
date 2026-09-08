@@ -113,7 +113,7 @@ describe('Loop.tick', () => {
   it('starts a ready card when below the active limit', async () => {
     const { loop, dispatcher } = build({ ready: [makeCard()] });
     await loop.tick();
-    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-1' }));
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-1' }), expect.any(Function));
   });
 
   it('starts nothing when the active limit is reached by a genuinely active card', async () => {
@@ -138,7 +138,7 @@ describe('Loop.tick', () => {
 
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-ready');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/restart/i));
-    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-2' }));
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-2' }), expect.any(Function));
   });
 
   it('closes a reviewed card once its pull request is merged', async () => {
@@ -162,7 +162,7 @@ describe('Loop.tick', () => {
 
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-ready');
     expect(trello.addComment).toHaveBeenCalledWith('card-1', expect.stringMatching(/restart/i));
-    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-2' }));
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-2' }), expect.any(Function));
   });
 
   it('does not let a Blocked card with a live workspace count twice or block a Ready card wrongly', async () => {
@@ -265,7 +265,7 @@ describe('Loop.tick', () => {
     expect(trello.moveCard).toHaveBeenCalledWith('card-2', 'list-ready');
     expect(trello.addComment).toHaveBeenCalledWith('card-2', expect.stringMatching(/restart/i));
     expect(trello.moveCard).not.toHaveBeenCalledWith('card-1', expect.anything());
-    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-3' }));
+    expect(dispatcher.claimAndStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'card-3' }), expect.any(Function));
   });
 });
 

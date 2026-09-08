@@ -14,3 +14,16 @@ export function findLastMarker(paneOutput: string): Marker | null {
   }
   return null;
 }
+
+const STEP_LINE = /^[\s│>|]*@@FIESTA:STEP[ \t]+(\S+)/;
+
+export function findLastStep(paneOutput: string): string | null {
+  const lines = paneOutput.replace(/\r\n/g, '\n').split('\n');
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const match = STEP_LINE.exec(lines[index] ?? '');
+    if (match) {
+      return match[1] ?? null;
+    }
+  }
+  return null;
+}

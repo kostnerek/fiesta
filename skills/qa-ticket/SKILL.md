@@ -13,6 +13,8 @@ workspace, so what you exercise is what you are about to push.
 ticket must not inherit your processes, your ports, or your half-finished state.
 Tear it down even when the QA pass fails — especially then.
 
+Print `@@FIESTA:STEP qa` on its own line before you bring the stack up.
+
 ## 1. Decide whether this ticket needs it
 
 Skip, and say you skipped it, when the change cannot be observed through the API:

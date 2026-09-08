@@ -1,6 +1,6 @@
 import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
-import { findLastMarker, type Marker } from './markers.js';
+import { findLastMarker, findLastStep, type Marker } from './markers.js';
 import type { Ticket } from './ticket.js';
 import {
   extractShortLink,
@@ -16,7 +16,7 @@ export type ActiveTicket = { ticket: Ticket; paneId: string };
 
 export type InspectOptions = { since: number | null; lastMarker: Marker | null };
 
-export type InspectResult = { outcome: Outcome; marker: Marker | null };
+export type InspectResult = { outcome: Outcome; marker: Marker | null; step: string | null };
 
 const TELEGRAM_BACKLOG_PAGE_SIZE = 100;
 
@@ -39,7 +39,9 @@ export class Escalator {
 
   async inspect(ticket: Ticket, paneId: string, options: InspectOptions): Promise<InspectResult> {
     const { herdr, telegram, trello, config } = this.deps;
-    const marker = findLastMarker(await herdr.readPane(paneId));
+    const pane = await herdr.readPane(paneId);
+    const marker = findLastMarker(pane);
+    const step = findLastStep(pane);
 
     if (marker && !isSameMarker(marker, options.lastMarker)) {
       const list = marker.kind === 'DONE' ? config.trello.lists.review : config.trello.lists.blocked;
@@ -49,11 +51,11 @@ export class Escalator {
         config.telegram.chatId,
         formatEscalation({ shortLink: ticket.shortLink, title: ticket.title, marker }),
       );
-      return { outcome: marker.kind === 'DONE' ? 'review' : 'blocked', marker };
+      return { outcome: marker.kind === 'DONE' ? 'review' : 'blocked', marker, step };
     }
 
     if (options.since === null) {
-      return { outcome: 'running', marker: null };
+      return { outcome: 'running', marker: null, step };
     }
 
     const status = await herdr.paneStatus(paneId);
@@ -72,10 +74,10 @@ export class Escalator {
           marker: { kind: 'FAIL', text: 'timed out with no marker' },
         }),
       );
-      return { outcome: 'blocked', marker: null };
+      return { outcome: 'blocked', marker: null, step };
     }
 
-    return { outcome: 'running', marker: null };
+    return { outcome: 'running', marker: null, step };
   }
 
   async deliverReplies(active: Map<string, ActiveTicket>): Promise<void> {

@@ -3,6 +3,8 @@ name: verify-ticket
 description: Use before opening a pull request — run the repo's own tests, lint and typecheck, then walk the ticket's acceptance criteria one by one with evidence for each.
 ---
 
+Print `@@FIESTA:STEP testing` on its own line before you run anything, so the progress your operator sees matches where you actually are.
+
 This is the last check before anything ships. Nobody re-reads your work before it becomes a PR — if you claim green here and you're wrong, a broken change goes out unattended. Be skeptical of your own change.
 
 ## 0. Verify every repository you changed

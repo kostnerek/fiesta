@@ -129,3 +129,30 @@ describe('TelegramClient', () => {
     );
   });
 });
+
+describe('progress messages', () => {
+  function client(calls: { method: string; params: Record<string, unknown> }[]) {
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      calls.push({
+        method: String(url).split('/').pop() ?? '',
+        params: JSON.parse(String(init.body)),
+      });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }));
+    }) as unknown as typeof fetch;
+    return new TelegramClient('token', fetchImpl);
+  }
+
+  it('returns the message id, which is what makes editing possible later', async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    await expect(client(calls).sendTracked('1', 'hello')).resolves.toBe(42);
+    expect(calls[0]?.method).toBe('sendMessage');
+  });
+
+  it('edits the message in place instead of sending another one', async () => {
+    const calls: { method: string; params: Record<string, unknown> }[] = [];
+    await client(calls).edit('1', 42, 'updated');
+
+    expect(calls[0]?.method).toBe('editMessageText');
+    expect(calls[0]?.params).toMatchObject({ chat_id: '1', message_id: 42, text: 'updated' });
+  });
+});
