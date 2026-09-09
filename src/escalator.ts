@@ -1,6 +1,6 @@
 import type { Config } from './config.js';
 import type { HerdrClient } from './herdr.js';
-import { findLastMarker, findLastStep, type Marker } from './markers.js';
+import { findLastMarker, findLastStep, findPrUrls, type Marker } from './markers.js';
 import type { Ticket } from './ticket.js';
 import {
   extractShortLink,
@@ -42,14 +42,19 @@ export class Escalator {
     const pane = await herdr.readPane(paneId);
     const marker = findLastMarker(pane);
     const step = findLastStep(pane);
+    const prUrls = findPrUrls(pane);
 
     if (marker && !isSameMarker(marker, options.lastMarker)) {
       const list = marker.kind === 'DONE' ? config.trello.lists.review : config.trello.lists.blocked;
       await trello.moveCard(ticket.cardId, list);
-      await trello.addComment(ticket.cardId, `🤖 ${marker.kind}: ${marker.text}`);
+      const detail =
+        marker.kind === 'DONE' && prUrls.length > 0
+          ? prUrls.join('\n')
+          : marker.text;
+      await trello.addComment(ticket.cardId, `🤖 ${marker.kind}: ${detail}`);
       await telegram.send(
         config.telegram.chatId,
-        formatEscalation({ shortLink: ticket.shortLink, title: ticket.title, marker }),
+        formatEscalation({ shortLink: ticket.shortLink, title: ticket.title, marker, prUrls }),
       );
       return { outcome: marker.kind === 'DONE' ? 'review' : 'blocked', marker, step };
     }

@@ -27,3 +27,16 @@ export function findLastStep(paneOutput: string): string | null {
   }
   return null;
 }
+
+const PR_LINE = /^[\s│>|]*@@FIESTA:PR[ \t]+(\S+)/;
+
+export function findPrUrls(paneOutput: string): string[] {
+  const seen = new Set<string>();
+  for (const line of paneOutput.replace(/\r\n/g, '\n').split('\n')) {
+    const match = PR_LINE.exec(line);
+    if (match?.[1]) {
+      seen.add(match[1]);
+    }
+  }
+  return [...seen];
+}

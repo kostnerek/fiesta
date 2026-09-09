@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findLastMarker, findLastStep } from './markers.js';
+import { findLastMarker, findLastStep, findPrUrls } from './markers.js';
 
 describe('findLastMarker', () => {
   it('returns null when the output has no marker', () => {
@@ -72,5 +72,39 @@ describe('the STEP marker', () => {
   it('is not confused with the markers that end a turn', () => {
     expect(findLastStep('@@FIESTA:DONE https://pr/1')).toBeNull();
     expect(findLastMarker('@@FIESTA:STEP qa')).toBeNull();
+  });
+});
+
+describe('per-repository PR lines', () => {
+  it('collects one url per line, so a wrapped terminal cannot swallow the rest', () => {
+    const pane = [
+      '@@FIESTA:PR https://github.com/o/platform/pull/1',
+      'some other output',
+      '@@FIESTA:PR https://github.com/o/backoffice/pull/2',
+      '@@FIESTA:DONE',
+    ].join('\n');
+
+    expect(findPrUrls(pane)).toEqual([
+      'https://github.com/o/platform/pull/1',
+      'https://github.com/o/backoffice/pull/2',
+    ]);
+  });
+
+  it('keeps them in the order they were opened', () => {
+    const pane = '@@FIESTA:PR https://b\n@@FIESTA:PR https://a';
+    expect(findPrUrls(pane)).toEqual(['https://b', 'https://a']);
+  });
+
+  it('reports each url once even if the agent repeats it', () => {
+    const pane = '@@FIESTA:PR https://a\n@@FIESTA:PR https://a';
+    expect(findPrUrls(pane)).toEqual(['https://a']);
+  });
+
+  it('survives the box drawing down the left of a pane', () => {
+    expect(findPrUrls('│ @@FIESTA:PR https://a')).toEqual(['https://a']);
+  });
+
+  it('is empty when the agent opened none', () => {
+    expect(findPrUrls('nothing here')).toEqual([]);
   });
 });

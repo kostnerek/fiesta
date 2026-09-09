@@ -156,3 +156,39 @@ describe('progress messages', () => {
     expect(calls[0]?.params).toMatchObject({ chat_id: '1', message_id: 42, text: 'updated' });
   });
 });
+
+describe('formatEscalation with several pull requests', () => {
+  it('lists every url on its own line, so none is lost in a run-on', () => {
+    const text = formatEscalation({
+      shortLink: 'aBcD1234',
+      title: 'Span two repos',
+      marker: { kind: 'DONE', text: '' },
+      prUrls: ['https://github.com/o/platform/pull/1', 'https://github.com/o/backoffice/pull/2'],
+    });
+
+    expect(text).toContain('\nhttps://github.com/o/platform/pull/1');
+    expect(text).toContain('\nhttps://github.com/o/backoffice/pull/2');
+  });
+
+  it('says how many there are, so a missing one is visible', () => {
+    const text = formatEscalation({
+      shortLink: 'aBcD1234',
+      title: 'Span two repos',
+      marker: { kind: 'DONE', text: '' },
+      prUrls: ['https://a', 'https://b'],
+    });
+
+    expect(text).toMatch(/2 PR/);
+  });
+
+  it('falls back to whatever the DONE line carried when no per-repo lines were printed', () => {
+    const text = formatEscalation({
+      shortLink: 'aBcD1234',
+      title: 'One repo',
+      marker: { kind: 'DONE', text: 'https://github.com/o/a/pull/9' },
+      prUrls: [],
+    });
+
+    expect(text).toContain('https://github.com/o/a/pull/9');
+  });
+});

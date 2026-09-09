@@ -119,6 +119,12 @@ Every turn must end with exactly one marker, alone at the start of its own line:
 - `@@FIESTA:DONE <pr-url>` — verification passed, the branch is pushed, and the draft PR is open.
 - `@@FIESTA:FAIL <reason>` — you could not deliver a working change (see `verify-ticket` for when this applies).
 
+And one line per pull request, printed the moment you open it:
+
+- `@@FIESTA:PR <url>` — one line, one url, one repository.
+
+Print it as soon as the PR exists, not saved up for the end. A ticket spanning three repositories prints three of these. They are what your operator is actually sent; a url that only ever appears inside a sentence, or crammed onto the DONE line beside two others, is a url that can be lost to a wrapped terminal.
+
 Separately from those, `@@FIESTA:STEP <stage>` on its own line reports where you are without ending the turn — `building`, `testing`, `qa`. It is a progress signal, not an answer, and the stages the board already knows (claimed, review, merged) are not yours to send.
 
 The daemon parses this marker to decide what happens to the card next. A turn that ends without one is read as you having gone silent, and after a timeout it is treated as a failure anyway — so never stop mid-task without emitting one.

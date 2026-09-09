@@ -17,6 +17,7 @@ export function formatEscalation(params: {
   shortLink: string;
   title: string;
   marker: Marker;
+  prUrls?: string[];
 }): string {
   const header = `🤖 [${params.shortLink}] ${params.title}`;
   if (params.marker.kind === 'ASK') {
@@ -25,7 +26,18 @@ export function formatEscalation(params: {
   if (params.marker.kind === 'FAIL') {
     return `${header}\n\n🛑 Zatrzymany: ${params.marker.text}`;
   }
-  return `${header}\n\n✅ Draft PR: ${params.marker.text}`;
+
+  // A ticket can span several repositories, and one line of space-separated
+  // urls is exactly what a wrapped terminal truncates.
+  const urls = params.prUrls?.length
+    ? params.prUrls
+    : params.marker.text.split(/\s+/).filter((part) => part.startsWith('http'));
+
+  if (urls.length === 0) {
+    return `${header}\n\n✅ Gotowe, ale agent nie podał żadnego PR-a.`;
+  }
+  const count = `${urls.length} PR${urls.length === 1 ? '' : '-y'}`;
+  return `${header}\n\n✅ ${count}:\n${urls.join('\n')}`;
 }
 
 export class TelegramClient {
