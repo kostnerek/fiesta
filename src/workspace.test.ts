@@ -1,15 +1,18 @@
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { inspect, promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+const execFileAsync = promisify(execFile);
 import {
   agentEnvPath,
   ensureMirror,
   prepareWorkspace,
   removeWorkspace,
   AGENT_UID,
+  mirrorHasCommits,
   shareClaudeSession,
   workspaceRoot,
   writeAgentEnvFile,
@@ -394,5 +397,22 @@ describe('prepareWorkspace ownership', () => {
     const writableByAnyone = (info.mode & 0o002) !== 0;
 
     expect(ownedByAgent || writableByAnyone).toBe(true);
+  });
+});
+
+describe('a repository with no commits', () => {
+  it('reports itself as empty rather than letting provisioning fail on a missing base', async () => {
+    const empty = join(root, 'origin', 'brand-new');
+    await mkdir(empty, { recursive: true });
+    await execFileAsync('git', ['init', '--bare', '-q', empty]);
+    const mirror = join(root, 'mirrors', 'brand-new.git');
+    await mkdir(dirname(mirror), { recursive: true });
+    await execFileAsync('git', ['clone', '--mirror', '-q', empty, mirror]);
+
+    await expect(mirrorHasCommits(mirror)).resolves.toBe(false);
+  });
+
+  it('a mirror with history reports as usable', async () => {
+    await expect(mirrorHasCommits(mirrorPath)).resolves.toBe(true);
   });
 });

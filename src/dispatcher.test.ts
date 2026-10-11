@@ -23,6 +23,7 @@ function build() {
   const git = {
     ensureMirror: vi.fn().mockResolvedValue('/root/repos/demo'),
     prepareWorkspace: vi.fn().mockResolvedValue('/root/work/aBcD1234'),
+    mirrorHasCommits: vi.fn().mockResolvedValue(true),
     writeAgentEnvFile: vi.fn().mockResolvedValue('/root/env/aBcD1234.env'),
     workspaceRoot: vi.fn().mockReturnValue('/root/work/aBcD1234'),
     shareClaudeSession: vi.fn().mockResolvedValue({
@@ -137,5 +138,17 @@ describe('Dispatcher across several repositories', () => {
 
     expect(trello.moveCard).toHaveBeenCalledWith('card-1', 'list-backlog');
     expect(git.ensureMirror).not.toHaveBeenCalled();
+  });
+});
+
+describe('a project containing an empty repository', () => {
+  it('provisions the others instead of failing the whole ticket on it', async () => {
+    const { dispatcher, git } = build();
+    git.mirrorHasCommits.mockResolvedValueOnce(false);
+
+    await dispatcher.claimAndStart(makeCard());
+
+    expect(git.prepareWorkspace).not.toHaveBeenCalled();
+    expect(git.writeAgentEnvFile).toHaveBeenCalled();
   });
 });

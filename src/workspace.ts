@@ -253,3 +253,8 @@ export async function removeWorkspace(params: { root: string; shortLink: string 
     await rm(envFile, { force: true });
   }
 }
+
+export async function mirrorHasCommits(mirrorPath: string): Promise<boolean> {
+  const { stdout } = await execFileAsync('git', ['-C', mirrorPath, 'for-each-ref', '--count=1']);
+  return stdout.trim().length > 0;
+}

@@ -14,6 +14,7 @@ import { TelegramClient } from './telegram.js';
 import { TrelloClient } from './trello.js';
 import {
   ensureMirror,
+  mirrorHasCommits,
   prepareWorkspace,
   removeWorkspace,
   workspaceRoot,
@@ -61,6 +62,7 @@ const loop = new Loop({
     git: {
       ensureMirror,
       prepareWorkspace,
+    mirrorHasCommits,
       writeAgentEnvFile,
       shareClaudeSession,
       workspaceRoot,

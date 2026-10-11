@@ -9,6 +9,7 @@ import type { TrelloClient } from './trello.js';
 import type {
   ensureMirror,
   prepareWorkspace,
+  mirrorHasCommits,
   workspaceRoot,
   shareClaudeSession,
   writeAgentEnvFile,
@@ -17,6 +18,7 @@ import type {
 type GitOperations = {
   ensureMirror: typeof ensureMirror;
   prepareWorkspace: typeof prepareWorkspace;
+  mirrorHasCommits: typeof mirrorHasCommits;
   writeAgentEnvFile: typeof writeAgentEnvFile;
   shareClaudeSession: typeof shareClaudeSession;
   workspaceRoot: typeof workspaceRoot;
@@ -68,14 +70,23 @@ export class Dispatcher {
     await trello.moveCard(card.id, config.trello.lists.inProgress);
     await onClaimed?.(card.shortLink, card.name);
 
+    // A repository with no commits has no base branch to branch from, and one
+    // of them would otherwise fail provisioning for every ticket in the
+    // project, including the ones that never touch it.
+    const empty: string[] = [];
     for (const source of sources) {
       const mirrorPath = await git.ensureMirror({
         root: config.paths.root,
         source,
         token: config.github.token,
       });
+      if (!(await git.mirrorHasCommits(mirrorPath))) {
+        empty.push(source.dir);
+        continue;
+      }
       await git.prepareWorkspace({ root: config.paths.root, mirrorPath, source, ticket });
     }
+    const usable = sources.filter((source) => !empty.includes(source.dir));
 
     const workspacePath = git.workspaceRoot(config.paths.root, ticket.shortLink);
     const session = await git.shareClaudeSession({
@@ -85,8 +96,8 @@ export class Dispatcher {
       root: config.paths.root,
       owner: config.github.owner,
       token: config.github.token,
-      sources,
-      prompt: buildPrompt(ticket, config.github.owner, sources),
+      sources: usable,
+      prompt: buildPrompt(ticket, config.github.owner, usable, empty),
       ticket,
     });
 

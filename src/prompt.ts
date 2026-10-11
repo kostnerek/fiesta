@@ -1,10 +1,23 @@
 import type { RepoSource } from './repo-source.js';
 import type { Ticket } from './ticket.js';
 
-export function buildPrompt(ticket: Ticket, owner: string, sources: RepoSource[]): string {
+export function buildPrompt(
+  ticket: Ticket,
+  owner: string,
+  sources: RepoSource[],
+  emptyRepos: string[] = [],
+): string {
   const checkouts = sources.map(
     (source) => `  /workspace/${source.dir}  ->  github.com/${source.owner}/${source.repo}`,
   );
+
+  const emptyNote = emptyRepos.length
+    ? [
+        '',
+        `Not checked out, because the repository has no commits yet: ${emptyRepos.join(', ')}.`,
+        'If the ticket needs one of those, say so and stop rather than inventing a checkout.',
+      ]
+    : [];
 
   return [
     'Use the orchestrate-ticket skill to deliver this ticket end to end.',
@@ -37,6 +50,7 @@ export function buildPrompt(ticket: Ticket, owner: string, sources: RepoSource[]
     `  (${sources.map((source) => `${source.owner}/${source.repo}`).join(',')}) and`,
     `  FIESTA_BASE_BRANCH (${ticket.baseBranch}) are set in your`,
     '  environment, alongside GITHUB_TOKEN.',
+    ...emptyNote,
   ].join('\n');
 }
 
