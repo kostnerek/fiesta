@@ -52,9 +52,14 @@ def die(message: str) -> None:
 
 
 def repo_dir() -> pathlib.Path:
+    # This command runs the tsoft platform, whose services carry no compose file
+    # of their own. A project whose repository ships one is not our business:
+    # that file is the authoritative description of what it needs.
     path = pathlib.Path("/workspace/platform")
     if not path.is_dir():
-        die("no /workspace/platform — this ticket has no platform checkout to run")
+        die("this ticket has no platform checkout, so there is no tsoft stack to run. "
+            "If the repository you changed ships its own docker-compose.yml, bring that "
+            "up instead — it, not this command, describes what the project needs.")
     return path
 
 

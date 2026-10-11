@@ -23,7 +23,21 @@ surface. Do not bring up thirteen services to prove a README.
 
 Everything else gets a QA pass.
 
-## 2. Bring the stack up
+## 2. Bring the application up — the way this project runs
+
+Projects do not share a way of starting. Pick by what the repository tells you,
+in this order:
+
+**The repository ships its own `docker-compose.yml`.** Use it. That file is the
+authoritative statement of what the project needs — which database, which
+version — and it is almost never the same as another project's. Bring it up with
+`docker compose up -d` from the repository root, wait for it to be healthy, then
+start the application itself the way its own scripts do. Read `.env.example` for
+the configuration it expects and write a `.env` with local values; never copy a
+secret from anywhere else.
+
+**Otherwise, if this ticket has a `platform` checkout**, it is the tsoft stack,
+whose services carry no compose file of their own:
 
 ```
 fiesta-stack up
@@ -31,12 +45,15 @@ fiesta-stack up
 
 That builds the services from your checkout, generates the configuration, starts
 them, and waits for the gateway to answer. It takes a few minutes; the build is
-cached, so unchanged services cost nothing.
+cached, so unchanged services cost nothing. If it fails, `fiesta-stack status`
+says which service did not start.
 
-If it fails, `fiesta-stack status` says which service did not start. A service
-that fails to boot **because of your change** is a QA failure — report it as one.
-A service that fails for an unrelated reason is worth naming in your report, but
-do not spend the ticket fixing it.
+**Otherwise there is nothing to run.** Say so and move to the next step rather
+than inventing a way to start it.
+
+Either way: a service that fails to start **because of your change** is a QA
+failure — report it as one. One that fails for an unrelated reason is worth
+naming in your report, but do not spend the ticket fixing it.
 
 ## 3. Write the cases before you run anything
 
@@ -57,12 +74,15 @@ two requests can reach at once, the concurrent case.
 
 ## 4. Run them and record what happened
 
-REST goes to `http://gateway-service:5001/api/v2` — the only REST surface; every
-other service is gRPC only. Requests need a JWT and the `sbe-client-id` tenant
-header.
+For the tsoft platform, REST goes to `http://gateway-service:5001/api/v2` — the
+only REST surface; every other service is gRPC only, and requests need a JWT and
+the `sbe-client-id` tenant header. For any other project, read its own routes;
+do not assume this shape.
 
-The database holds **imported production-shaped data**, shared by everything.
-That has two consequences you must respect:
+When the project runs against the **shared** database — the tsoft stack does —
+it holds imported production-shaped data used by everything, and two rules
+follow. A project that brings up its own database in its own compose owns that
+database and these do not apply to it.
 
 - **Scope every case to data you created.** Generate a fresh client or user id
   per case rather than reusing whatever you find. A case that mutates an existing
@@ -76,10 +96,11 @@ result. A case you did not run is not a pass.
 ## 5. Tear it down
 
 ```
-fiesta-stack down
+fiesta-stack down          # the tsoft stack
+docker compose down        # a project that brought up its own
 ```
 
-Run this whatever the outcome. Then report:
+Run the one that matches what you started, whatever the outcome. Then report:
 
 - each case with its verdict and its evidence
 - any service that would not start, and whether your change caused it
